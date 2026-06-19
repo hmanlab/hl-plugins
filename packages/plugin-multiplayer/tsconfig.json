@@ -2,7 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["bun"]
   },
   "include": ["opencode/plugin/**/*.ts", "src/**/*.ts"],
   "exclude": ["opencode/skill/**"]
