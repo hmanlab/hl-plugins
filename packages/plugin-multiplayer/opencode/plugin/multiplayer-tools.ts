@@ -96,6 +96,7 @@ import {
   parseCode,
   assignCollisionSuffix,
 } from "../../src/handle/index.ts"
+import { Toaster, Logger } from "../../src/bridge/index.ts"
 
 // ── Module state ──────────────────────────────────────────────────────────
 
@@ -247,36 +248,15 @@ async function pushHistory(
 
 // ── TUI bridge ────────────────────────────────────────────────────────────
 
-function makeToaster(client: PluginInput["client"]) {
-  return async function toast(
-    message: string,
-    variant: "info" | "success" | "warning" | "error" = "info",
-    title?: string,
-  ): Promise<void> {
-    try {
-      await client.tui.showToast({
-        body: { message, variant, title, duration: 4000 },
-      })
-    } catch {
-      // ignore — toast is best-effort
-    }
-  }
+type ToastFn = Toaster["show"]
+type LogFn = Logger["log"]
+
+function toToastFn(t: Toaster): ToastFn {
+  return t.show.bind(t)
 }
 
-function makeLogger(client: PluginInput["client"]) {
-  return async function log(
-    level: "debug" | "info" | "warn" | "error",
-    message: string,
-    extra?: Record<string, unknown>,
-  ): Promise<void> {
-    try {
-      await client.app.log({
-        body: { service: "multiplayer", level, message, extra: extra ?? {} },
-      })
-    } catch {
-      // ignore
-    }
-  }
+function toLogFn(l: Logger): LogFn {
+  return l.log.bind(l)
 }
 
 // ── Peer helpers ──────────────────────────────────────────────────────────
@@ -482,8 +462,8 @@ async function startHost(
   handle: string,
   bindPort: number,
   bindHost: string,
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<{ ok: true; code: string; url: string } | { ok: false; reason: string }> {
   if (role !== "idle") {
     return { ok: false, reason: `not_idle (currently ${role})` }
@@ -540,8 +520,8 @@ async function startHost(
 async function handleHostMessage(
   ws: Bun.ServerWebSocket<HostSocketData>,
   raw: string | Buffer,
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   const text = typeof raw === "string" ? raw : raw.toString("utf8")
   let msg: WireMessage
@@ -675,8 +655,8 @@ async function handleHostMessage(
 
 async function handleHostClose(
   ws: Bun.ServerWebSocket<HostSocketData>,
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   if (ws.data.state === "authenticated") {
     const peer = ws.data.peer
@@ -690,7 +670,7 @@ async function handleHostClose(
   }
 }
 
-function stopHost(toast: ReturnType<typeof makeToaster>, log: ReturnType<typeof makeLogger>): void {
+function stopHost(toast: ToastFn, log: LogFn): void {
   if (hostServer) {
     try {
       hostServer.stop(true)
@@ -726,8 +706,8 @@ function buildSuccessorQueue(): { handle: string; code: string }[] {
 }
 
 async function startLeave(
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   if (role !== "host") return
   if (pendingLeave !== "none") return
@@ -758,8 +738,8 @@ async function startLeave(
 }
 
 async function cancelLeave(
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   if (pendingLeave !== "pending") return
   clearLeaveTimers()
@@ -772,8 +752,8 @@ async function cancelLeave(
 }
 
 async function onGraceExpired(
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   if (pendingLeave !== "pending") return
   leaveTimer = null
@@ -790,8 +770,8 @@ async function onGraceExpired(
 }
 
 async function tryNextSuccessor(
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   if (pendingLeave !== "pending") return
   const next = successorQueue.shift()
@@ -838,8 +818,8 @@ async function onTransferConfirmed(
   successorWs: { send(data: string): unknown },
   newCode: string,
   newUrl: string,
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   if (transferTimer) {
     clearTimeout(transferTimer)
@@ -881,8 +861,8 @@ async function onTransferConfirmed(
 
 async function onTransferFailed(
   reason: string,
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   if (transferTimer) {
     clearTimeout(transferTimer)
@@ -904,8 +884,8 @@ async function dialHost(
   wsUrl: string,
   code: string,
   handle: string,
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
   mode: "join" | "rejoin",
 ): Promise<DialResult> {
   const ws = new WebSocket(wsUrl)
@@ -1079,8 +1059,8 @@ async function becomeSuccessorHost(
   msg: Extract<WireMessage, { type: "transfer_to_me" }>,
   oldHostWs: WebSocket,
   oldHostUrl: string,
-  toast: ReturnType<typeof makeToaster>,
-  log: ReturnType<typeof makeLogger>,
+  toast: ToastFn,
+  log: LogFn,
 ): Promise<void> {
   // We are being promoted. Mint a new code, start our own host, add
   // the old code to our grace list, then confirm back to the old host.
@@ -1205,7 +1185,7 @@ async function becomeSuccessorHost(
   void oldHostUrl
 }
 
-function guestLeave(toast: ReturnType<typeof makeToaster>, log: ReturnType<typeof makeLogger>): void {
+function guestLeave(toast: ToastFn, log: LogFn): void {
   if (guestWs) {
     try {
       guestWs.send(JSON.stringify({ type: "bye" }))
@@ -1229,8 +1209,10 @@ function guestLeave(toast: ReturnType<typeof makeToaster>, log: ReturnType<typeo
 // ── Plugin entry ──────────────────────────────────────────────────────────
 
 export default async (input: PluginInput) => {
-  const toast = makeToaster(input.client)
-  const log = makeLogger(input.client)
+  const toaster = new Toaster(input.client)
+  const logger = new Logger(input.client)
+  const toast = toToastFn(toaster)
+  const log = toLogFn(logger)
   const handle = resolveHandle()
   const envPort = resolvePort()
   const envHost = resolveHost()
