@@ -97,9 +97,11 @@ import {
   assignCollisionSuffix,
 } from "../../src/handle/index.ts"
 import { Toaster, Logger } from "../../src/bridge/index.ts"
+import { StateStore, readHandleFileSync, writeHandleFile } from "../../src/persistence/index.ts"
 
 // ── Module state ──────────────────────────────────────────────────────────
 
+let store: StateStore
 let role: Role = "idle"
 let port = DEFAULT_PORT
 let hostAddr = `${DEFAULT_HOST}:${DEFAULT_PORT}`
@@ -138,7 +140,7 @@ function resolveHandle(): string {
       return norm
     }
   }
-  const persisted = loadPersistedHandleSync()
+  const persisted = readHandleFileSync()
   if (persisted) {
     myResolvedHandle = persisted
     return persisted
@@ -146,104 +148,6 @@ function resolveHandle(): string {
   const fallback = normalizeHandle(osUser()) || "anon"
   myResolvedHandle = fallback
   return fallback
-}
-
-// ── State persistence ─────────────────────────────────────────────────────
-
-function stateDir(): string {
-  return join(homedir(), ".hl-plugins", "multiplayer")
-}
-
-function statePath(): string {
-  return join(stateDir(), "state.json")
-}
-
-function handlePath(): string {
-  return join(stateDir(), "handle")
-}
-
-async function ensureStateDir(): Promise<void> {
-  await mkdir(stateDir(), { recursive: true })
-}
-
-function emptyState(handle: string): SessionState {
-  return { myHandle: handle, lastHostUrl: null, graceCodes: [], history: [] }
-}
-
-function loadPersistedHandleSync(): string | null {
-  try {
-    const path = handlePath()
-    if (!existsSync(path)) return null
-    const text = readFileSync(path, "utf-8").trim()
-    if (text.length === 0) return null
-    if (!isValidHandle(text)) return null
-    return text
-  } catch {
-    return null
-  }
-}
-
-async function savePersistedHandle(handle: string): Promise<void> {
-  await ensureStateDir()
-  await Bun.write(handlePath(), handle)
-}
-
-async function readState(): Promise<SessionState> {
-  const path = statePath()
-  const file = Bun.file(path)
-  if (!(await file.exists())) return emptyState(resolveHandle())
-  try {
-    const text = await file.text()
-    const parsed = JSON.parse(text) as Partial<SessionState>
-    return {
-      myHandle:
-        typeof parsed.myHandle === "string" ? parsed.myHandle : resolveHandle(),
-      lastHostUrl:
-        typeof parsed.lastHostUrl === "string" ? parsed.lastHostUrl : null,
-      graceCodes: Array.isArray(parsed.graceCodes)
-        ? parsed.graceCodes.filter(
-            (g): g is GraceCode =>
-              typeof g === "object" &&
-              g !== null &&
-              typeof (g as GraceCode).code === "string" &&
-              typeof (g as GraceCode).handle === "string" &&
-              typeof (g as GraceCode).validUntil === "number",
-          )
-        : [],
-      history: Array.isArray(parsed.history)
-        ? parsed.history.filter(
-            (h): h is HistoryEntry =>
-              typeof h === "object" &&
-              h !== null &&
-              typeof (h as HistoryEntry).ts === "number" &&
-              typeof (h as HistoryEntry).event === "string",
-          )
-        : [],
-    }
-  } catch {
-    return emptyState(resolveHandle())
-  }
-}
-
-async function writeStateAtomic(state: SessionState): Promise<void> {
-  await ensureStateDir()
-  const path = statePath()
-  const tmp = `${path}.tmp`
-  await Bun.write(tmp, JSON.stringify(state, null, 2))
-  await rename(tmp, path)
-}
-
-function pruneGraceCodes(state: SessionState): SessionState {
-  const now = Date.now()
-  return { ...state, graceCodes: state.graceCodes.filter((g) => g.validUntil > now) }
-}
-
-async function pushHistory(
-  state: SessionState,
-  entry: HistoryEntry,
-): Promise<SessionState> {
-  const history = [entry, ...state.history].slice(0, HISTORY_MAX)
-  return { ...state, history }
 }
 
 // ── TUI bridge ────────────────────────────────────────────────────────────
@@ -360,102 +264,6 @@ function cleanup(): void {
 
 // ── State persistence helpers ────────────────────────────────────────────
 
-async function persistHostStarted(handle: string, code: string): Promise<void> {
-  try {
-    const state = pruneGraceCodes(await readState())
-    const next = await pushHistory(
-      { ...state, myHandle: handle },
-      { ts: Date.now(), event: "host_started", handle, detail: code },
-    )
-    await writeStateAtomic(next)
-  } catch {
-    // best-effort
-  }
-}
-
-async function persistHostChanged(
-  newHandle: string,
-  newCode: string,
-  oldCode: string,
-  oldHandle: string,
-  newUrl: string,
-): Promise<void> {
-  try {
-    const state = pruneGraceCodes(await readState())
-    const validUntil = Date.now() + REJOIN_TTL_MS
-    const graceCodes = [
-      ...state.graceCodes,
-      { code: oldCode, handle: oldHandle, validUntil },
-    ]
-    const next = await pushHistory(
-      { ...state, myHandle: newHandle, graceCodes },
-      {
-        ts: Date.now(),
-        event: "host_changed",
-        handle: newHandle,
-        detail: `from:${oldHandle} newCode:${newCode} url:${newUrl}`,
-      },
-    )
-    await writeStateAtomic(next)
-  } catch {
-    // best-effort
-  }
-}
-
-async function persistSessionEnded(handle: string, reason: string): Promise<void> {
-  try {
-    const state = pruneGraceCodes(await readState())
-    const next = await pushHistory(
-      { ...state, myHandle: handle },
-      { ts: Date.now(), event: "session_ended", handle, detail: reason },
-    )
-    await writeStateAtomic(next)
-  } catch {
-    // best-effort
-  }
-}
-
-async function persistGuestJoined(handle: string, hostUrl: string): Promise<void> {
-  try {
-    const state = pruneGraceCodes(await readState())
-    const next = await pushHistory(
-      { ...state, lastHostUrl: hostUrl },
-      { ts: Date.now(), event: "guest_joined", handle },
-    )
-    await writeStateAtomic(next)
-  } catch {
-    // best-effort
-  }
-}
-
-async function persistGuestPromoted(
-  newHandle: string,
-  newCode: string,
-  oldCode: string,
-  oldHandle: string,
-): Promise<void> {
-  try {
-    const state = pruneGraceCodes(await readState())
-    const validUntil = Date.now() + REJOIN_TTL_MS
-    const graceCodes = [
-      ...state.graceCodes,
-      { code: oldCode, handle: oldHandle, validUntil },
-    ]
-    const next = await pushHistory(
-      { ...state, myHandle: newHandle, graceCodes },
-      {
-        ts: Date.now(),
-        event: "host_changed",
-        handle: newHandle,
-        detail: `promoted:old=${oldHandle} oldCode=${oldCode}`,
-      },
-    )
-    await writeStateAtomic(next)
-  } catch {
-    // best-effort
-  }
-}
-
 // ── Host role ─────────────────────────────────────────────────────────────
 
 async function startHost(
@@ -510,7 +318,7 @@ async function startHost(
   role = "host"
   port = bindPort
   hostAddr = `${bindHost}:${bindPort}`
-  await persistHostStarted(handle, code)
+  await store.recordHostStarted(handle, code)
   await log("info", "host started", { handle, port: bindPort, code, url })
   await toast(`invite: ${code}`, "success", "multiplayer")
   await toast(`hosting on ${url}`, "info", "multiplayer")
@@ -759,7 +567,7 @@ async function onGraceExpired(
   leaveTimer = null
   if (successorQueue.length === 0) {
     broadcast({ type: "session_ended", reason: "no_peers" })
-    await persistSessionEnded(hostHandle ?? "host", "no_peers")
+    await store.recordSessionEnded(hostHandle ?? "host", "no_peers")
     stopHost(toast, log)
     role = "idle"
     pendingLeave = "none"
@@ -777,7 +585,7 @@ async function tryNextSuccessor(
   const next = successorQueue.shift()
   if (!next) {
     broadcast({ type: "session_ended", reason: "no_reachable_successor" })
-    await persistSessionEnded(hostHandle ?? "host", "no_reachable_successor")
+    await store.recordSessionEnded(hostHandle ?? "host", "no_reachable_successor")
     stopHost(toast, log)
     role = "idle"
     pendingLeave = "none"
@@ -832,7 +640,7 @@ async function onTransferConfirmed(
   await toast(`✓ transferred to ${newUrl.replace(/^ws:\/\//, "")}`, "success", "multiplayer")
 
   // Persist the host change with the new grace code.
-  await persistHostChanged(
+  await store.recordHostChanged(
     parseCode(newCode)?.handle ?? "host",
     newCode,
     snapshot.code,
@@ -952,7 +760,7 @@ async function dialHost(
         } else {
           await toast(`✓ connected to ${msg.handle}`, "success", "multiplayer")
         }
-        await persistGuestJoined(handle, wsUrl)
+        await store.recordGuestJoined(handle, wsUrl)
         finish({ ok: true, hostHandle: msg.handle, myHandle: handle })
         return
       }
@@ -1147,7 +955,7 @@ async function becomeSuccessorHost(
   hostAddr = `${newBindHost}:${newPort}`
 
   // Persist the new host state with the old code in grace list.
-  await persistGuestPromoted(
+  await store.recordGuestPromoted(
     msg.new_handle,
     newCode,
     msg.old_code,
@@ -1209,6 +1017,7 @@ function guestLeave(toast: ToastFn, log: LogFn): void {
 // ── Plugin entry ──────────────────────────────────────────────────────────
 
 export default async (input: PluginInput) => {
+  store = new StateStore(resolveHandle)
   const toaster = new Toaster(input.client)
   const logger = new Logger(input.client)
   const toast = toToastFn(toaster)
@@ -1220,10 +1029,10 @@ export default async (input: PluginInput) => {
 
   // Persist handle on first load (if not from env).
   if (!process.env["MP_HANDLE"]) {
-    const persisted = loadPersistedHandleSync()
+    const persisted = readHandleFileSync()
     if (!persisted) {
       try {
-        await savePersistedHandle(handle)
+        await writeHandleFile(handle)
       } catch {
         // best-effort
       }
