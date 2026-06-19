@@ -16,7 +16,8 @@
     "format": "prettier --write \"**/*.{ts,json}\"",
     "format:check": "prettier --check \"**/*.{ts,json}\"",
     "prepublishOnly": "npm run typecheck && npm run build",
-    "publish:cli": "npm run build && npm publish --workspace packages/cli --access public"
+    "publish:cli": "npm run build && npm publish --workspace packages/cli --access public",
+    "publish:companion": "npm publish --workspace packages/plugin-multiplayer/companion --access public"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.17.8",
