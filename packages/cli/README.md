@@ -52,6 +52,14 @@ Full docs live in the [monorepo](https://github.com/hmanlab/hl-plugins):
 - [Command reference](https://github.com/hmanlab/hl-plugins/blob/main/docs/commands.md) — every flag and exit code
 - [Adding a plugin](https://github.com/hmanlab/hl-plugins/blob/main/docs/adding-a-plugin.md) — drop a folder, no CLI changes needed
 
+## Security
+
+The install flow runs the contract's shell commands on your machine.
+Review the `hl-plugins` field in each plugin's `package.json` before
+installing. API keys are passed as separate argv elements (no shell
+interpolation). Full notes in
+[SECURITY.md](https://github.com/hmanlab/hl-plugins/blob/main/SECURITY.md).
+
 ## License
 
 MIT
