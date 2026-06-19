@@ -6,7 +6,8 @@ import { IdleRole, HostRole, GuestRole, TransferController, type RoleState } fro
 import { isValidHandle, normalizeHandle, osUser, mintCode, isValidCode, assignCollisionSuffix } from "./handle/index.ts"
 import { GRACE_S, CASCADE_TIMEOUT_MS, DEFAULT_PORT, DEFAULT_HOST } from "./constants.ts"
 import { peerListForBroadcast } from "./role/peer-helpers.ts"
-import type { PeerInfo, Role, WireMessage, HostSocketData } from "./types.ts"
+import type { PeerInfo, Role, HostSocketData } from "./types.ts"
+import type { WireMessage } from "./protocol/index.ts"
 import { startHostServer } from "./server/index.ts"
 
 export type { PluginInput } from "@opencode-ai/plugin"
@@ -125,6 +126,10 @@ export class MultiplayerPlugin {
     this.tc?.reset()
     this.volunteers = new Set()
 
+    if (this.hostRole) {
+      this.hostRole.stop()
+      this.hostRole = null
+    }
     try {
       this.hostServer?.stop(true)
     } catch {

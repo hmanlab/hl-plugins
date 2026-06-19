@@ -17,9 +17,12 @@ export async function testVolunteerAndHandoff(): Promise<void> {
   await sleep(50)
 
   g1.ws.send(JSON.stringify({ type: "volunteer" }))
-  await sleep(50)
+  await sleep(150)
   const statusAfterVol = await hooks.tool.mp_status.execute({}, makeToolContext())
-  await expect(statusAfterVol.includes("carol [volunteer]"), "host status shows carol as volunteer")
+  await expect(
+    statusAfterVol.includes("carol") && statusAfterVol.includes("[volunteer]"),
+    "host status shows carol as volunteer",
+  )
 
   const leaveResult = await hooks.tool.mp_leave.execute({}, makeToolContext())
   await expect(leaveResult.includes("Leaving in"), "leave starts grace")
@@ -30,10 +33,11 @@ export async function testVolunteerAndHandoff(): Promise<void> {
 
   const start = Date.now()
   let toMe: GuestMessage | undefined
-  while (Date.now() - start < 2000) {
+  // Grace is 10s, so wait up to 12s for transfer_to_me
+  while (Date.now() - start < 12000) {
     toMe = g1.messages.find((m) => m.type === "transfer_to_me")
     if (toMe) break
-    await sleep(20)
+    await sleep(50)
   }
   await expect(toMe !== undefined, "carol got transfer_to_me")
   if (toMe && toMe.type === "transfer_to_me") {

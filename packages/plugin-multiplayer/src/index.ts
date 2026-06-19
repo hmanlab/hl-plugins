@@ -42,6 +42,10 @@ export async function createMultiplayerPlugin(input: PluginInput) {
       getHostHandle: () => plugin.hostHandle,
       mintCode,
       stopHost() {
+        if (plugin.hostRole) {
+          plugin.hostRole.stop()
+          plugin.hostRole = null
+        }
         if (plugin.hostServer) {
           try {
             plugin.hostServer.stop(true)
@@ -49,11 +53,13 @@ export async function createMultiplayerPlugin(input: PluginInput) {
             // ignore
           }
           plugin.hostServer = null
-          plugin.hostCode = null
-          plugin.hostHandle = null
-          plugin.hostPeers = new Map()
-          plugin.roleState = new IdleRole(idleDeps)
         }
+        plugin.hostCode = null
+        plugin.hostHandle = null
+        plugin.hostPeers = new Map()
+        plugin.volunteers = new Set()
+        plugin.roleState = new IdleRole(idleDeps)
+        plugin.role = "idle"
       },
       recordSessionEnded: (h, r) => store.recordSessionEnded(h, r),
       recordHostChanged: (nh, nc, oc, oh, nu) => store.recordHostChanged(nh, nc, oc, oh, nu),

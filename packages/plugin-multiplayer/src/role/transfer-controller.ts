@@ -62,8 +62,6 @@ export class TransferController {
   }
 
   private findPeerWs(handle: string): Bun.ServerWebSocket<HostSocketData> | null {
-    const hr = this.cb.getHostRole()
-    if (hr) return hr.findPeerWs(handle)
     for (const [ws, peer] of this.getPeers().entries()) {
       if (peer.handle === handle) return ws
     }

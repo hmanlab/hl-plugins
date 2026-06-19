@@ -16,7 +16,7 @@ export async function testHandleCollision(): Promise<void> {
 
   const status = await hooks.tool.mp_status.execute({}, makeToolContext())
   const peerLines = status.split("\n").filter((l) => l.trim().startsWith("- "))
-  const handles = peerLines.map((l) => l.replace(/^-\s+/, "").split(" ")[0]!)
+  const handles = peerLines.map((l) => l.replace(/^\s*-\s+/, "").split(" ")[0]!)
   const unique = new Set(handles)
   await expect(handles.length === 2 && unique.size === 2, `two distinct handles (got ${handles.join(",")})`)
   await expect(handles.includes("alice"), "one handle is plain alice")

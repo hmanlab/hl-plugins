@@ -222,7 +222,6 @@ export class HostRole implements RoleState {
   }
 
   dispose(): void {
-    this.transfer?.reset()
     this.stop()
   }
 }
