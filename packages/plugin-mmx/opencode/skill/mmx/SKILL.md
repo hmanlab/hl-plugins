@@ -29,7 +29,18 @@ The `mmx-tools` plugin exposes seven tools that wrap the official MiniMax CLI:
 
 ## Output location
 
-By default all generated files land in `~/Desktop/mmx-output/`. Override per-call with `out_dir` / `out_path`.
+All generated files save to `~/Desktop/mmx-output/` by default — regardless of which repo or directory OpenCode was launched from. This is intentional; do not override it on your own.
+
+**Never pass `out_dir` / `out_path` unless the user explicitly asked for a different save location in this conversation.** Passing these args based on your own inference (e.g. "save to the current repo") is wrong and will be silently corrected to the default with a warning in the tool output.
+
+Two ways the user can legitimately override:
+
+1. **Per-call:** tell the agent explicitly in chat ("save this to my Pictures folder"), and the agent will pass the right `out_dir` / `out_path`.
+2. **Permanent:** set `MMX_OUTPUT_DIR=/some/path` in the user's shell rc (`~/.zshrc`, `~/.bashrc`) before launching OpenCode. This changes the default for all mmx tools.
+
+Suspicious paths (`$HOME`, `~/Desktop`, `/tmp`, `.`) passed via `out_dir` / `out_path` are always rejected and fall back to `~/Desktop/mmx-output/` — even when the user explicitly asks for them. (Users wanting those locations should use `MMX_OUTPUT_DIR` for the legitimate case.)
+
+`mmx_image` defaults to a unique filename prefix per call (`image-<timestamp>`) so back-to-back calls don't overwrite each other. Pass an explicit `filename_prefix` when you want predictable sequential naming (e.g. `logo_001.jpg`, `logo_002.jpg`).
 
 ## Common patterns
 

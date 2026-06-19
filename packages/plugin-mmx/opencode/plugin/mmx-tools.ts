@@ -10,18 +10,54 @@
 //   mmx auth login --api-key sk-xxxxx
 // After that, no key is needed in opencode.
 //
-// All generated files default to ~/Desktop/mmx-output/.
+// All generated files default to ~/Desktop/mmx-output/. The user can override
+// the default directory permanently via the MMX_OUTPUT_DIR env var; the LLM
+// should never pass out_dir / out_path unless the user explicitly asked.
 
 import { tool } from "@opencode-ai/plugin"
 import { homedir } from "node:os"
-import { join, resolve, isAbsolute } from "node:path"
+import { basename, dirname, join, resolve, isAbsolute } from "node:path"
 import { mkdirSync, existsSync } from "node:fs"
 
 const DEFAULT_OUT_DIR = join(homedir(), "Desktop", "mmx-output")
 
 function resolveOutDir(outDir: string | undefined, worktree: string): string {
-  const target = outDir ?? DEFAULT_OUT_DIR
+  const target = outDir ?? process.env.MMX_OUTPUT_DIR ?? DEFAULT_OUT_DIR
   return isAbsolute(target) ? target : resolve(worktree, target)
+}
+
+function isSuspiciousOutDir(absPath: string): boolean {
+  const home = homedir()
+  const suspects = [home, join(home, "Desktop"), "/tmp", "/private/tmp", "."]
+  return absPath === "" || suspects.includes(absPath)
+}
+
+function warnSuspiciousOutDir(originalArg: string, usedInstead: string): string {
+  return `Note: out_dir/out_path "${originalArg}" looks like a mistake (home directory, Desktop root, /tmp, or cwd). Saving to "${usedInstead}" instead. Pass an explicit subdirectory to override.`
+}
+
+function resolveFilePath(
+  argsOutPath: string | undefined,
+  worktree: string,
+  defaultFileName: string,
+): { filePath: string; wasSuspicious: boolean; originalArg: string | undefined } {
+  const envDir = process.env.MMX_OUTPUT_DIR ?? DEFAULT_OUT_DIR
+  const requested = argsOutPath ?? join(envDir, defaultFileName)
+  const requestedDirAbs = isAbsolute(requested)
+    ? dirname(requested)
+    : resolve(worktree, dirname(requested))
+  if (isSuspiciousOutDir(requestedDirAbs)) {
+    return {
+      filePath: join(DEFAULT_OUT_DIR, basename(requested)),
+      wasSuspicious: true,
+      originalArg: argsOutPath,
+    }
+  }
+  return {
+    filePath: isAbsolute(requested) ? requested : join(requestedDirAbs, basename(requested)),
+    wasSuspicious: false,
+    originalArg: argsOutPath,
+  }
 }
 
 function ensureDir(dir: string): void {
@@ -69,7 +105,7 @@ export default async () => {
             .string()
             .optional()
             .describe(
-              "Directory to save images to. Default ~/Desktop/mmx-output/.",
+              "Override save directory. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/ (or $MMX_OUTPUT_DIR if set). Suspicious paths fall back to the default with a warning.",
             ),
           optimize_prompt: tool.schema
             .boolean()
@@ -78,22 +114,28 @@ export default async () => {
           filename_prefix: tool.schema
             .string()
             .optional()
-            .describe("Filename prefix. Default 'image'."),
+            .describe("Filename prefix. Defaults to a unique per-call value (image-<timestamp>) so back-to-back calls don't overwrite each other. Pass an explicit value for predictable sequential naming."),
         },
         async execute(args, ctx) {
-          const outDir = resolveOutDir(args.out_dir, ctx.worktree)
+          const requestedDir = resolveOutDir(args.out_dir, ctx.worktree)
+          const outDir = isSuspiciousOutDir(requestedDir) ? DEFAULT_OUT_DIR : requestedDir
           ensureDir(outDir)
+          const filenamePrefix = args.filename_prefix ?? `image-${Date.now()}`
           const cliArgs = ["image", "generate", "--prompt", args.prompt]
           if (args.aspect_ratio) cliArgs.push("--aspect-ratio", args.aspect_ratio)
           if (args.n) cliArgs.push("--n", String(args.n))
           if (args.seed != null) cliArgs.push("--seed", String(args.seed))
           if (args.optimize_prompt) cliArgs.push("--prompt-optimizer")
-          cliArgs.push("--out-dir", outDir, "--out-prefix", args.filename_prefix ?? "image", "--non-interactive")
+          cliArgs.push("--out-dir", outDir, "--out-prefix", filenamePrefix, "--non-interactive")
           const { stdout, stderr, exitCode } = await runMmx(cliArgs)
           if (exitCode !== 0) {
             return `mmx image generate failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
-          return `Image generation complete.\n\n${stdout.trim()}\n\nSaved to: ${outDir}`
+          let msg = `Image generation complete.\n\n${stdout.trim()}\n\nSaved to: ${outDir}\nFilename prefix: ${filenamePrefix}`
+          if (outDir !== requestedDir && args.out_dir) {
+            msg += `\n\n${warnSuspiciousOutDir(args.out_dir, outDir)}`
+          }
+          return msg
         },
       }),
 
@@ -118,12 +160,15 @@ export default async () => {
           out_path: tool.schema
             .string()
             .optional()
-            .describe("Output .mp3 path. Default ~/Desktop/mmx-output/speech-<timestamp>.mp3"),
+            .describe("Override output .mp3 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/speech-<timestamp>.mp3 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning."),
         },
         async execute(args, ctx) {
-          const outPath =
-            args.out_path ?? join(DEFAULT_OUT_DIR, `speech-${Date.now()}.mp3`)
-          ensureDir(outPath.replace(/\/[^/]+$/, ""))
+          const { filePath: outPath, wasSuspicious, originalArg } = resolveFilePath(
+            args.out_path,
+            ctx.worktree,
+            `speech-${Date.now()}.mp3`,
+          )
+          ensureDir(dirname(outPath))
           const cliArgs = ["speech", "synthesize", "--text", args.text]
           if (args.voice) cliArgs.push("--voice", args.voice)
           if (args.speed != null) cliArgs.push("--speed", String(args.speed))
@@ -132,7 +177,11 @@ export default async () => {
           if (exitCode !== 0) {
             return `mmx speech synthesize failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
-          return `Speech synthesized.\n\nSaved to: ${outPath}`
+          let msg = `Speech synthesized.\n\nSaved to: ${outPath}`
+          if (wasSuspicious && originalArg) {
+            msg += `\n\n${warnSuspiciousOutDir(originalArg, outPath)}`
+          }
+          return msg
         },
       }),
 
@@ -153,12 +202,15 @@ export default async () => {
           out_path: tool.schema
             .string()
             .optional()
-            .describe("Output .mp4 path. Default ~/Desktop/mmx-output/video-<timestamp>.mp4"),
+            .describe("Override output .mp4 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/video-<timestamp>.mp4 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning."),
         },
         async execute(args, ctx) {
-          const outPath =
-            args.out_path ?? join(DEFAULT_OUT_DIR, `video-${Date.now()}.mp4`)
-          ensureDir(outPath.replace(/\/[^/]+$/, ""))
+          const { filePath: outPath, wasSuspicious, originalArg } = resolveFilePath(
+            args.out_path,
+            ctx.worktree,
+            `video-${Date.now()}.mp4`,
+          )
+          ensureDir(dirname(outPath))
           const cliArgs = ["video", "generate", "--prompt", args.prompt]
           if (args.model) cliArgs.push("--model", args.model)
           cliArgs.push("--download", outPath, "--non-interactive")
@@ -166,7 +218,11 @@ export default async () => {
           if (exitCode !== 0) {
             return `mmx video generate failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
-          return `Video generation complete.\n\nSaved to: ${outPath}`
+          let msg = `Video generation complete.\n\nSaved to: ${outPath}`
+          if (wasSuspicious && originalArg) {
+            msg += `\n\n${warnSuspiciousOutDir(originalArg, outPath)}`
+          }
+          return msg
         },
       }),
 
@@ -196,12 +252,15 @@ export default async () => {
           out_path: tool.schema
             .string()
             .optional()
-            .describe("Output .mp3 path. Default ~/Desktop/mmx-output/music-<timestamp>.mp3"),
+            .describe("Override output .mp3 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/music-<timestamp>.mp3 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning."),
         },
         async execute(args, ctx) {
-          const outPath =
-            args.out_path ?? join(DEFAULT_OUT_DIR, `music-${Date.now()}.mp3`)
-          ensureDir(outPath.replace(/\/[^/]+$/, ""))
+          const { filePath: outPath, wasSuspicious, originalArg } = resolveFilePath(
+            args.out_path,
+            ctx.worktree,
+            `music-${Date.now()}.mp3`,
+          )
+          ensureDir(dirname(outPath))
           const cliArgs = ["music", "generate", "--prompt", args.prompt]
           if (args.lyrics) cliArgs.push("--lyrics", args.lyrics)
           if (args.instrumental) cliArgs.push("--instrumental")
@@ -212,7 +271,11 @@ export default async () => {
           if (exitCode !== 0) {
             return `mmx music generate failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
-          return `Music generation complete.\n\nSaved to: ${outPath}`
+          let msg = `Music generation complete.\n\nSaved to: ${outPath}`
+          if (wasSuspicious && originalArg) {
+            msg += `\n\n${warnSuspiciousOutDir(originalArg, outPath)}`
+          }
+          return msg
         },
       }),
 

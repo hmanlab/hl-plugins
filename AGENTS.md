@@ -151,22 +151,41 @@ npm run publish:cli                  # typecheck + build + npm publish --access 
   `packages/plugin-mmx/opencode/plugin/mmx-tools.ts`. The install flow
   copies it to `~/.opencode/plugin/mmx-tools.ts`. Don't duplicate the
   source.
-
-## Phases
-
-| # | Scope | Status |
-|---|---|---|
-| 0 | Docs + scaffolding | ✅ done |
-| 1 | `packages/cli/` skeleton (arg dispatch + help) | ✅ done |
-| 2 | Move mmx plugin into `packages/plugin-mmx/` | ✅ done |
-| 3 | Install flow (pre-flight → auth → copy → merge → verify) | ✅ done |
-| 4 | Symmetric ops (uninstall/status/update) | ✅ done |
-| 5 | Plugin registry auto-discovery (dev + published mode) | ✅ done |
-| 6 | Publish to npm (build infra + publishable CLI) | ✅ done |
-| 7 | CI (GitHub Actions on PR + tag-triggered publish) | ✅ done |
+- **mmx output directory:** `MMX_OUTPUT_DIR` env var is the canonical
+  user-controlled override for the default save location (currently
+  `~/Desktop/mmx-output/`). The plugin honors it for all 4 mmx tools
+  (`mmx_image`, `mmx_speech`, `mmx_video`, `mmx_music`). The LLM-passed
+  `out_dir` / `out_path` is a per-call override only — never the default.
+  Suspicious paths (`$HOME`, `~/Desktop`, `/tmp`, `.`) fall back to
+  `~/Desktop/mmx-output/` with a warning in the tool output.
 
 ## When you finish
 
 - Don't commit secrets (no API keys, no SSH keys).
 - Don't change the plugin contract without updating `docs/architecture.md` and `docs/adding-a-plugin.md` in the same commit.
 - Don't push to `main` without a clean working tree and a passing `git status`.
+- **Use closing keywords on PRs.** GitHub only auto-closes issues when the PR body or a commit message contains `Closes #N`, `Fixes #N`, or `Resolves #N`. A bare `#N` reference (in the PR title or commit message) just links the issue — it does not close it.
+
+## GitHub issue and PR body format
+
+When drafting GitHub issues or PR bodies — in chat for the user to copy-paste, or as the body of an `gh issue create` / `gh pr create` command — **always output the full body as a properly fenced Markdown block** using correct GFM syntax:
+
+- `#` for the title, `##` for sections, `###` for subsections
+- Backticks around inline code (`` `mmx-cli` ``, `` `image_001.jpg` ``)
+- Fenced code blocks with a language hint (`` ```ts ``, `` ```bash ``, `` ```json ``)
+- Pipe tables with the separator row so GitHub renders them as tables (`| --- | --- |`)
+- `**bold**` and `*italic*` for emphasis
+
+**Do not** paste the body as plain text — headings, tables, and code blocks silently lose their Markdown syntax and render as broken prose on GitHub. When writing in chat for the user to copy, wrap the whole body in a single ```` ```markdown ```` fence.
+
+Recommended issue template (used for the `mmx_image` filename-collision bug):
+
+1. **Summary** — one-paragraph description of the problem
+2. **Repro / Steps to reproduce** — minimal code or commands that trigger the bug
+3. **Root cause** — file path + line number + the offending snippet, plus why it matters
+4. **Impact** — who hits this, what state/data is affected
+5. **Proposed fix** — concrete code change (the actual diff, not a hand-wave)
+6. **Behavior after the fix** — before/after table for the affected scenarios
+7. **Alternatives considered** — what else was on the table and why this won
+8. **Affected files** — exact paths to change
+9. **Version** — which release this targets
