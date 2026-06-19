@@ -12,7 +12,7 @@
 import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { discoverPlugins, defaultInstallPlugins, getPlugin } from "../lib/registry.js"
-import { run, tryRun, ShellError, fillTemplate } from "../lib/shell.js"
+import { run, runArgv, tryRun, ShellError, fillTemplate } from "../lib/shell.js"
 import { ui } from "../lib/ui.js"
 import {
   opencodeConfigDir,
@@ -81,12 +81,14 @@ async function authenticate(plugin: PluginManifest, opts: InstallOpts): Promise<
   }
   if (!key) throw new Error(`No ${auth.keyLabel} provided.`)
 
-  const loginCmd = fillTemplate(auth.login, { key })
-  const login = await run(loginCmd, { throwOnError: false })
-  if (login.code !== 0) {
+  const login = auth.login
+  const loginRes = typeof login === "string"
+    ? await run(fillTemplate(login, { key }), { throwOnError: false })
+    : await runArgv(login.cmd, login.args, { key }, { throwOnError: false })
+  if (loginRes.code !== 0) {
     throw new Error(
-      `Login failed (exit ${login.code}).\n` +
-        `  ${(login.stderr || login.stdout).trim() || "(no output)"}`,
+      `Login failed (exit ${loginRes.code}).\n` +
+        `  ${(loginRes.stderr || loginRes.stdout).trim() || "(no output)"}`,
     )
   }
 

@@ -17,6 +17,10 @@ npx /hl-plugins install mmx    # install just the mmx plugin
 |---|---|---|
 | `@hl-plugins/mmx` | Image, video, music, speech, search, vision, and quota via MiniMax | [`mmx-cli`](https://github.com/MiniMax-AI/cli) + MiniMax Token Plan |
 
+> The install flow runs the contract's shell commands on your machine.
+> Review the `hl-plugins` field in the plugin's `package.json` before
+> installing. See [SECURITY.md](./SECURITY.md).
+
 ## Commands
 
 - `npx /hl-plugins install [plugin]` — install plugin(s) into your OpenCode

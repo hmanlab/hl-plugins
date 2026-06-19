@@ -22,9 +22,20 @@ export type PluginRequirement = {
   update?: string
 }
 
+export type LoginArg = string | { var: string }
+
+/**
+ * The login command. Two forms:
+ *   - string: legacy. Interpolated via `fillTemplate` and run through `sh -c`.
+ *              Not safe for user-supplied values.
+ *   - object: preferred for any login that takes user input. Runs as direct
+ *              argv — no shell, no metacharacter interpretation.
+ */
+export type LoginSpec = string | { cmd: string; args: LoginArg[] }
+
 export type PluginAuth = {
   check: string
-  login: string
+  login: LoginSpec
   verify: string
   keyLabel: string
   /** Optional env var to read the key from (e.g. "MMX_API_KEY"). */
