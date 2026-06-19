@@ -5,6 +5,6 @@
     "noEmit": true,
     "types": ["bun"]
   },
-  "include": ["opencode/plugin/**/*.ts", "src/**/*.ts"],
+  "include": ["opencode/plugin/**/*.ts", "src/**/*.ts", "shared/**/*.ts"],
   "exclude": ["opencode/skill/**"]
 }

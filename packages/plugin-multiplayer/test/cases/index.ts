@@ -8,6 +8,7 @@ import { testCancelLeave } from "./cancel-leave.ts"
 import { testStatePersistence } from "./state-persistence.ts"
 import { testHandleCollision } from "./handle-collision.ts"
 import { testRejoinGrace, testRejoinExpired } from "./rejoin-grace.ts"
+import { testChatRoundtrip, testTypingIndicator, testChatOnIdle, testChatEmpty } from "./chat.ts"
 
 export const CASES: { name: string; fn: () => Promise<void> }[] = [
   { name: "Phase 01 baseline", fn: testPhase01Baseline },
@@ -21,4 +22,8 @@ export const CASES: { name: string; fn: () => Promise<void> }[] = [
   { name: "Handle collision", fn: testHandleCollision },
   { name: "Rejoin grace", fn: testRejoinGrace },
   { name: "Rejoin expired", fn: testRejoinExpired },
+  { name: "Chat roundtrip", fn: testChatRoundtrip },
+  { name: "Typing indicator", fn: testTypingIndicator },
+  { name: "Chat on idle rejected", fn: testChatOnIdle },
+  { name: "Chat empty rejected", fn: testChatEmpty },
 ]

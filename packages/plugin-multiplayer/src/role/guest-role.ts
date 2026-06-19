@@ -24,6 +24,7 @@ export class GuestRole implements RoleState {
   private hostUrl: string | null = null
   private endedReason: string | null = null
   private reconnectFn: ((newCode: string, newUrl: string) => Promise<void>) | null = null
+  private peerList: { handle: string; joinedAt: number }[] = []
 
   constructor(
     private opts: {
@@ -36,6 +37,10 @@ export class GuestRole implements RoleState {
       promote?: (msg: TransferToMeMsg, oldHostWs: WebSocket, oldHostUrl: string) => Promise<PromoteResult>
       reconnect?: (newCode: string, newUrl: string) => Promise<void>
       ended?: (reason: string) => void
+      onPeersChanged?: (peers: { handle: string; joinedAt: number }[]) => void
+      onChatReceived?: (msg: { from: string; text: string; ts: number }) => void
+      onTypingReceived?: (from: string, state: "start" | "stop") => void
+      onStateChange?: (state: "joining" | "joined" | "leaving" | "left" | "transferring") => void
     },
   ) {}
 
@@ -49,6 +54,10 @@ export class GuestRole implements RoleState {
 
   getHostUrl(): string | null {
     return this.hostUrl
+  }
+
+  getPeerList(): { handle: string; joinedAt: number }[] {
+    return this.peerList
   }
 
   isConnected(): boolean {
@@ -122,6 +131,11 @@ export class GuestRole implements RoleState {
           this.hostHandle = msg.handle as string
           this.hostUrl = wsUrl
           this.myHandle = this.opts.handle
+          this.peerList = Array.isArray((msg as { peers?: unknown }).peers)
+            ? (msg as unknown as { peers: { handle: string; joinedAt: number }[] }).peers.filter(
+                (p) => p && typeof p.handle === "string" && typeof p.joinedAt === "number",
+              )
+            : []
           clearTimeout(timeout)
           await this.opts.logger.log("info", "guest joined", {
             hostHandle: msg.handle,
@@ -142,8 +156,41 @@ export class GuestRole implements RoleState {
           return
         }
 
+        if (msg.type === "peers_update") {
+          this.peerList = Array.isArray((msg as { peers?: unknown }).peers)
+            ? (msg as unknown as { peers: { handle: string; joinedAt: number }[] }).peers.filter(
+                (p) => p && typeof p.handle === "string" && typeof p.joinedAt === "number",
+              )
+            : []
+          this.opts.onPeersChanged?.(this.peerList)
+          return
+        }
+
         if (msg.type === "host_leaving") {
           await this.opts.toaster.show(`host leaving in ${msg.grace_s}s`, "warning", "multiplayer")
+          return
+        }
+
+        if (msg.type === "chat") {
+          const m = msg as unknown as { text?: unknown; from?: unknown; ts?: unknown }
+          const text = typeof m.text === "string" ? m.text : ""
+          const from = typeof m.from === "string" ? m.from : (this.hostHandle ?? "host")
+          const ts = typeof m.ts === "number" ? m.ts : Date.now()
+          const truncated = text.length > 200 ? text.slice(0, 200) + "…" : text
+          await this.opts.toaster.show(`${from}: ${truncated}`, "info", "chat")
+          await this.opts.logger.log("debug", "guest: chat received", { from, len: text.length })
+          this.opts.onChatReceived?.({ from, text, ts })
+          return
+        }
+
+        if (msg.type === "typing") {
+          const m = msg as unknown as { state?: unknown; from?: unknown }
+          const state = m.state === "stop" ? "stop" : "start"
+          const from = typeof m.from === "string" ? m.from : (this.hostHandle ?? "host")
+          if (state === "start") {
+            await this.opts.toaster.show(`${from} is typing…`, "info", "chat")
+          }
+          this.opts.onTypingReceived?.(from, state)
           return
         }
 
@@ -270,6 +317,25 @@ export class GuestRole implements RoleState {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: "volunteer" }))
     }
+  }
+
+  sendChat(text: string): { ok: true; ts: number } | { ok: false; reason: string } {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return { ok: false, reason: "not_connected" }
+    }
+    const trimmed = text.trim()
+    if (trimmed.length === 0) return { ok: false, reason: "empty" }
+    if (trimmed.length > 4000) return { ok: false, reason: "too_long" }
+    const ts = Date.now()
+    const handle = this.myHandle ?? this.opts.handle
+    this.ws.send(JSON.stringify({ type: "chat", from: handle, text: trimmed, ts }))
+    return { ok: true, ts }
+  }
+
+  sendTyping(state: "start" | "stop"): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+    const handle = this.myHandle ?? this.opts.handle
+    this.ws.send(JSON.stringify({ type: "typing", from: handle, state }))
   }
 
   leave(): void {

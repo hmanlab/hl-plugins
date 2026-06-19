@@ -1,7 +1,7 @@
 # Phase 03 — Companion pane + chat
 
-**Status:** Planned
-**Depends on:** [Phase 02](./phase-02.md) shipped
+**Status:** Shipped (v0.3.0)
+**Depends on:** [Phase 02](./phase-02.md) ✅ Shipped
 **Goal:** Ship the companion TUI process (Node + Ink) with chat history. Auto-spawn into a tmux split / iTerm2 split / detached terminal window. Both peers send chat messages and see them in real-time, with a typing indicator.
 **Outcome:** Bob runs `opencode` in tmux. His tmux pane splits automatically, the companion appears in the new pane, and shows Bob's handle. Carol joins, types `hi` in her companion, and Bob's companion shows `carol: hi` within 500ms. A "carol is typing..." banner appears in Bob's companion while Carol composes.
 

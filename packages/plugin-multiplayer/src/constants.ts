@@ -11,3 +11,8 @@ export const JOIN_TIMEOUT_MS = 5000
 export const HISTORY_MAX = 50
 
 export const MAX_COLLISION_ATTEMPTS = 50
+
+export const CHAT_MAX_TEXT = 4000
+export const CHAT_MAX_HISTORY = 500
+export const CHAT_TOAST_MS = 4000
+export const TYPING_TIMEOUT_MS = 3000

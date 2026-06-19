@@ -20,17 +20,30 @@ export async function newPlugin(): Promise<{
   toasts: Captured[]
   logs: Captured[]
   port: number
+  plugin: Awaited<ReturnType<typeof import("../../opencode/plugin/multiplayer-tools.ts").default>> extends {
+    _plugin: infer P
+  }
+    ? P
+    : never
 }> {
   testCounter++
   const port = await findFreePort(8000 + testCounter * 10)
   process.env["MP_PORT"] = String(port)
   process.env["MP_HOST"] = HOST
   process.env["MP_HANDLE"] = `tester${testCounter}`
+  // Disable the auto-spawn entirely so the plugin never tries to open
+  // a real tmux / iTerm2 / detached terminal window during tests.
+  // Tests that exercise the UDS server call startCompanionServer() directly.
+  process.env["MP_NO_COMPANION"] = "1"
+  delete process.env["TMUX"]
+  delete process.env["TERM_PROGRAM"]
+  delete process.env["ITERM_SESSION_ID"]
+  delete process.env["TERMINAL"]
   const mod = (await import(`../../opencode/plugin/multiplayer-tools.ts?step=${testCounter}`)).default
   const { client, toasts, logs } = makeMockClient()
   const input = makeMockInput(client)
   const hooks = await mod(input)
-  return { hooks, toasts, logs, port }
+  return { hooks, toasts, logs, port, plugin: (hooks as unknown as { _plugin: unknown })._plugin as never }
 }
 
 function makeMockClient() {

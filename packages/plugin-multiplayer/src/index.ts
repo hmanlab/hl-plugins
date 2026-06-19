@@ -7,6 +7,19 @@ import { resolvePort, resolveHost } from "./env/index.ts"
 import { IdleRole, TransferController } from "./role/index.ts"
 import { isValidHandle, normalizeHandle, osUser, mintCode } from "./handle/index.ts"
 import { GRACE_S, CASCADE_TIMEOUT_MS } from "./constants.ts"
+import { companionSocketPath, companionTokenPath } from "./companion/paths.ts"
+import { detectStrategy, manualCommand, spawnStrategy } from "./companion/spawner.ts"
+
+function companionBinPath(): string {
+  // Allow override via env (e.g. for testing or custom installs)
+  const override = process.env["MP_COMPANION_BIN"]
+  if (override) return override
+  // Default: <plugin-dir>/companion/bin/multiplayer-watch.js
+  // The plugin's index.ts is at packages/plugin-multiplayer/src/index.ts;
+  // the companion's bin is at packages/plugin-multiplayer/companion/bin/.
+  const here = new URL(".", import.meta.url).pathname
+  return new URL("../companion/bin/multiplayer-watch.js", import.meta.url).pathname
+}
 
 export async function createMultiplayerPlugin(input: PluginInput) {
   const toaster = new Toaster(input.client)
@@ -88,8 +101,73 @@ export async function createMultiplayerPlugin(input: PluginInput) {
     role: plugin.roleState.kind,
   })
 
+  // Start the companion UDS server asynchronously so it never blocks the
+  // OpenCode prompt (NFR-PF.4: ≤ 50ms plugin startup overhead).
+  // `MP_NO_COMPANION=1` disables the auto-spawn entirely (tests use this).
+  let companionSpawned = false
+  if (process.env["MP_NO_COMPANION"] === "1" || process.env["MP_NO_COMPANION"] === "true") {
+    // No-op: tests and power users can still call startCompanionServer directly.
+  } else {
+    void (async () => {
+      const server = await plugin.startCompanionServer()
+      if (!server) return
+      const strategy = detectStrategy({
+        env: {
+          TMUX: process.env["TMUX"],
+          TERM_PROGRAM: process.env["TERM_PROGRAM"],
+          ITERM_SESSION_ID: process.env["ITERM_SESSION_ID"],
+          TERMINAL: process.env["TERMINAL"],
+          PATH: process.env["PATH"],
+          MP_NO_COMPANION: process.env["MP_NO_COMPANION"],
+        },
+      })
+      if (strategy === "manual") {
+        const cmd = manualCommand({
+          binPath: companionBinPath(),
+          socketPath: companionSocketPath(),
+          token: server.getToken(),
+        })
+        await toaster.show(`Run \`${cmd}\` in another terminal for the companion pane`, "info", "multiplayer")
+        return
+      }
+      const result = spawnStrategy({
+        strategy,
+        binPath: companionBinPath(),
+        socketPath: companionSocketPath(),
+        token: server.getToken(),
+        cwd: process.cwd(),
+      })
+      if (!result.ok) {
+        await toaster.show(
+          `Companion spawn failed (${result.strategy}: ${result.reason}). Run \`${result.command}\` in another terminal.`,
+          "warning",
+          "multiplayer",
+        )
+        return
+      }
+      companionSpawned = true
+      await logger.log("info", "companion spawned", { strategy, pid: result.pid })
+    })()
+  }
+
   return {
-    dispose: () => plugin.dispose(),
+    dispose: async () => {
+      try {
+        if (companionSpawned) {
+          // The companion lives in a tmux pane or detached window —
+          // closing the plugin process won't kill it. We rely on the
+          // goodbye message and the UDS connection dropping to let
+          // the companion shut down on its own. For Phase 03, we
+          // don't track the spawned PID.
+        }
+        await plugin.stopCompanionServer()
+      } catch {
+        // best-effort
+      }
+      plugin.dispose()
+    },
+    // Exposed for tests / advanced consumers. Not part of the documented API.
+    _plugin: plugin,
     tool: {
       mp_host: tool({
         description:
@@ -146,6 +224,19 @@ export async function createMultiplayerPlugin(input: PluginInput) {
         args: {},
         async execute() {
           return plugin.mpCode()
+        },
+      }),
+
+      mp_chat: tool({
+        description:
+          "Send a chat message to all peers in the session. The text is shown verbatim in each peer's companion pane (and as an OpenCode toast until the companion is running). Mirrors the companion's input box. Requires an active session (host or guest).",
+        args: {
+          text: tool.schema
+            .string()
+            .describe("The chat message to send. Plain text, no slash prefix. Max 4000 characters."),
+        },
+        async execute(args) {
+          return plugin.mpChat(args.text)
         },
       }),
 

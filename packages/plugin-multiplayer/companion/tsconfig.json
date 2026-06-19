@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "noImplicitOverride": false,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "paths": {
+      "ink": ["./node_modules/ink"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "bin/**/*.js"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,4 +1,9 @@
+import { CHAT_MAX_TEXT } from "../constants.ts"
+
 export type Peer = { handle: string; joinedAt: number }
+
+export type ChatMessage = { type: "chat"; from: string; text: string; ts: number }
+export type TypingMessage = { type: "typing"; from: string; state: "start" | "stop" }
 
 export type WireMessage =
   | { type: "auth"; code: string }
@@ -15,7 +20,11 @@ export type WireMessage =
   | { type: "transfer_failed"; reason: string }
   | { type: "transfer_start"; new_code: string; new_url: string; new_handle: string }
   | { type: "session_ended"; reason: string }
+  | ChatMessage
+  | TypingMessage
   | { type: "bye" }
+
+export { CHAT_MAX_TEXT, CHAT_MAX_HISTORY } from "../constants.ts"
 
 export function isWireMessage(x: unknown): x is WireMessage {
   if (typeof x !== "object" || x === null) return false
@@ -60,6 +69,20 @@ export function isWireMessage(x: unknown): x is WireMessage {
         typeof (x as { new_url?: unknown }).new_url === "string" &&
         typeof (x as { new_handle?: unknown }).new_handle === "string"
       )
+    case "chat": {
+      const v = x as { from?: unknown; text?: unknown; ts?: unknown }
+      return (
+        typeof v.from === "string" &&
+        typeof v.text === "string" &&
+        v.text.length > 0 &&
+        v.text.length <= CHAT_MAX_TEXT &&
+        typeof v.ts === "number"
+      )
+    }
+    case "typing": {
+      const v = x as { from?: unknown; state?: unknown }
+      return typeof v.from === "string" && (v.state === "start" || v.state === "stop")
+    }
     default:
       return false
   }
