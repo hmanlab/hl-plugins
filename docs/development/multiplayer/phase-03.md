@@ -180,8 +180,8 @@ packages/plugin-multiplayer/
         └── multiplayer/
             └── SKILL.md
 
-# New: companion process
-packages/plugin-multiplayer/companion/
+# New: companion process (standalone workspace)
+packages/multiplayer-watch/
 ├── package.json                          # separate node module
 ├── tsconfig.json
 ├── src/

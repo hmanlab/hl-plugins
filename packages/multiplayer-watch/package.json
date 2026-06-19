@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Companion TUI for the multiplayer plugin. Presence, chat, and chat-first input box over a Unix domain socket.",
   "bin": {
-    "multiplayer-watch": "./bin/multiplayer-watch.js"
+    "multiplayer-watch": "bin/multiplayer-watch.js"
   },
   "engines": {
     "node": ">=18"

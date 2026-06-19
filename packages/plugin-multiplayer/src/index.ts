@@ -14,11 +14,11 @@ function companionBinPath(): string {
   // Allow override via env (e.g. for testing or custom installs)
   const override = process.env["MP_COMPANION_BIN"]
   if (override) return override
-  // Default: <plugin-dir>/companion/bin/multiplayer-watch.js
-  // The plugin's index.ts is at packages/plugin-multiplayer/src/index.ts;
-  // the companion's bin is at packages/plugin-multiplayer/companion/bin/.
-  const here = new URL(".", import.meta.url).pathname
-  return new URL("../companion/bin/multiplayer-watch.js", import.meta.url).pathname
+  // The companion is published as a separate workspace package at
+  // packages/multiplayer-watch/.  When the plugin is loaded from
+  // packages/plugin-multiplayer/dist/ the relative path is
+  // ../../../multiplayer-watch/bin/multiplayer-watch.js.
+  return new URL("../../../multiplayer-watch/bin/multiplayer-watch.js", import.meta.url).pathname
 }
 
 export async function createMultiplayerPlugin(input: PluginInput) {

@@ -193,7 +193,7 @@ OpenCode's plugin API does not expose a sidebar, panel, or chat-area component �
 #### 6.5.1 Companion pane (the primary UI)
 
 - **F-5.1** A companion TUI process renders the live multiplayer UI: presence list, intent feed, chat history, input box.
-- **F-5.2** The companion is a separate Node + Ink (React-for-CLIs) process shipped inside the plugin package at `packages/plugin-multiplayer/companion/`. It communicates with the in-process plugin code over a Unix domain socket (or named pipe on Windows) — never via the OpenCode TUI's stdin/stdout.
+- **F-5.2** The companion is a separate Node + Ink (React-for-CLIs) process published as a standalone workspace package at `packages/multiplayer-watch/`. It communicates with the in-process plugin code over a Unix domain socket (or named pipe on Windows) — never via the OpenCode TUI's stdin/stdout.
 - **F-5.3** Three command forms (see §6.7 for the full list):
   - `<message>` typed into the companion pane's input box — sends a chat message (no slash prefix needed in the companion)
   - `intent <text>` typed into the companion pane's input box — broadcasts an intent
