@@ -321,7 +321,17 @@ export class MultiplayerPlugin {
       return "Invalid code format. Expected `mp-<handle>-XXXX-XXXX`."
     }
     const handle = this.resolveHandle()
-    const gr = new GuestRole({ port: this.port, host: resolveHost(), handle, state: this.store, toaster: this.toaster, logger: this.logger })
+    const gr = new GuestRole({
+      port: this.port,
+      host: resolveHost(),
+      handle,
+      state: this.store,
+      toaster: this.toaster,
+      logger: this.logger,
+      promote: (msg, oldWs, oldUrl) => this.promoteToHost(msg, oldWs, oldUrl),
+      reconnect: (newCode, newUrl) => this.reconnectAsGuest(newCode, newUrl, "rejoin"),
+      ended: (reason) => this.onGuestEnded(reason),
+    })
     const result = await gr.dial(code, "join")
     if (result.ok) {
       this.guestRole = gr
@@ -415,7 +425,17 @@ export class MultiplayerPlugin {
       return "Invalid code format. Expected `mp-<handle>-XXXX-XXXX`."
     }
     const handle = this.resolveHandle()
-    const gr = new GuestRole({ port: this.port, host: resolveHost(), handle, state: this.store, toaster: this.toaster, logger: this.logger })
+    const gr = new GuestRole({
+      port: this.port,
+      host: resolveHost(),
+      handle,
+      state: this.store,
+      toaster: this.toaster,
+      logger: this.logger,
+      promote: (msg, oldWs, oldUrl) => this.promoteToHost(msg, oldWs, oldUrl),
+      reconnect: (newCode, newUrl) => this.reconnectAsGuest(newCode, newUrl, "rejoin"),
+      ended: (reason) => this.onGuestEnded(reason),
+    })
     const result = await gr.dial(code, "rejoin")
     if (result.ok) {
       this.guestRole = gr
@@ -427,6 +447,88 @@ export class MultiplayerPlugin {
       return `No host responded at ws://${resolveHost()}:${this.port}. Is the host's opencode running? The grace code may have expired (>1 hour).`
     }
     return `Rejoin failed: ${result.reason}`
+  }
+
+  private async promoteToHost(
+    msg: { type: "transfer_to_me"; new_handle: string; old_code: string; old_handle: string; peers: { handle: string; joinedAt: number }[] },
+    oldHostWs: WebSocket,
+    _oldHostUrl: string,
+  ): Promise<{ ok: true; newCode: string; newUrl: string } | { ok: false; reason: string }> {
+    const newHandle = msg.new_handle
+    const newPort = resolvePort()
+    const newBindHost = resolveHost()
+    const newUrl = `ws://${newBindHost}:${newPort}`
+
+    const hr = new HostRole({
+      port: newPort,
+      host: newBindHost,
+      handle: newHandle,
+      state: this.store,
+      toaster: this.toaster,
+      logger: this.logger,
+    })
+    // Add the old code to our grace list so other peers can rejoin
+    // with it during the transfer window.
+    hr.addGraceCode(msg.old_code)
+
+    const result = await hr.start()
+    if (!result.ok) {
+      return { ok: false, reason: result.reason }
+    }
+
+    this.hostRole = hr
+    this.hostCode = result.code
+    this.hostHandle = newHandle
+    this.port = newPort
+    this.hostAddr = `${newBindHost}:${newPort}`
+    this.setRoleHost(hr)
+    return { ok: true, newCode: result.code, newUrl: result.url }
+  }
+
+  private async reconnectAsGuest(
+    newCode: string,
+    newUrl: string,
+    mode: "join" | "rejoin",
+  ): Promise<void> {
+    // The old WS has been closed by the transfer_start handler.
+    // Re-dial the new host with the new code.
+    const handle = this.resolveHandle()
+    const gr = new GuestRole({
+      port: this.port,
+      host: resolveHost(),
+      handle,
+      state: this.store,
+      toaster: this.toaster,
+      logger: this.logger,
+      promote: (msg, oldWs, oldUrl) => this.promoteToHost(msg, oldWs, oldUrl),
+      reconnect: (code, url) => this.reconnectAsGuest(code, url, "rejoin"),
+      ended: (reason) => this.onGuestEnded(reason),
+    })
+    const result = await gr.dial(newCode, mode)
+    if (result.ok) {
+      this.guestRole = gr
+      this.guestWs = gr.getWs()
+      this.setRoleGuest(gr)
+    } else {
+      this.guestRole = null
+      this.guestWs = null
+      this.resetToIdleRole()
+      await this.toaster.show(
+        `reconnect after transfer failed: ${result.reason}`,
+        "error",
+        "multiplayer",
+      )
+    }
+  }
+
+  private onGuestEnded(reason: string): void {
+    this.guestRole = null
+    this.guestWs = null
+    this.guestHostHandle = null
+    this.guestMyHandle = null
+    this.guestHostUrl = null
+    this.resetToIdleRole()
+    void this.toaster.show(`session ended: ${reason}`, "warning", "multiplayer")
   }
 
   dispose(): void {

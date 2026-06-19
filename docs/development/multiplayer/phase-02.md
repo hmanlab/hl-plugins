@@ -1,6 +1,6 @@
 # Phase 02 — Sessions & host handoff
 
-**Status:** Planned
+**Status:** Shipped (v0.2.0)
 **Depends on:** [Phase 01](./phase-01.md) ✅ Shipped
 **Goal:** A proper session model. The host can leave without ending the session — the longest-connected peer (or a volunteer) is auto-promoted to host and mints a fresh invite code. Old codes remain valid for 1 hour so the previous host can rejoin as a guest.
 **Outcome:** Bob hosts. Carol and Dave join. Bob runs `mp_leave`. All peers see a 10-second grace countdown, then Carol (longest-connected) becomes host with a brand-new code. Bob can later run `opencode` again and `mp_rejoin <his-old-code>` to come back as guest within 1 hour.

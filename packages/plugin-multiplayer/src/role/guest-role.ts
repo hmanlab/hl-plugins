@@ -11,6 +11,12 @@ export type DialResult =
   | { ok: true; hostHandle: string; myHandle: string }
   | { ok: false; reason: string; transferTo?: { new_code: string; new_url: string; new_handle: string } }
 
+export type TransferToMeMsg = Extract<WireMessage, { type: "transfer_to_me" }>
+
+export type PromoteResult =
+  | { ok: true; newCode: string; newUrl: string }
+  | { ok: false; reason: string }
+
 export class GuestRole implements RoleState {
   readonly kind = "guest" as const
 
@@ -18,6 +24,8 @@ export class GuestRole implements RoleState {
   private hostHandle: string | null = null
   private myHandle: string | null = null
   private hostUrl: string | null = null
+  private endedReason: string | null = null
+  private reconnectFn: ((newCode: string, newUrl: string) => Promise<void>) | null = null
 
   constructor(
     private opts: {
@@ -27,6 +35,9 @@ export class GuestRole implements RoleState {
       state: StateStore
       toaster: Toaster
       logger: Logger
+      promote?: (msg: TransferToMeMsg, oldHostWs: WebSocket, oldHostUrl: string) => Promise<PromoteResult>
+      reconnect?: (newCode: string, newUrl: string) => Promise<void>
+      ended?: (reason: string) => void
     },
   ) {}
 
@@ -48,6 +59,10 @@ export class GuestRole implements RoleState {
 
   getWs(): WebSocket | null {
     return this.ws
+  }
+
+  getEndedReason(): string | null {
+    return this.endedReason
   }
 
   async dial(code: string, mode: "join" | "rejoin"): Promise<DialResult> {
@@ -118,6 +133,93 @@ export class GuestRole implements RoleState {
 
         if (msg.type === "leave_cancelled") {
           await this.opts.toaster.show("host cancelled leave", "info", "multiplayer")
+          return
+        }
+
+        if (msg.type === "transfer_to_me") {
+          // We are the chosen successor. Promote to host, mint a
+          // new code, start our own host server, then send
+          // transfer_confirmed back to the old host.
+          if (!this.opts.promote) return
+          if (!this.ws) return
+          const oldWs = this.ws
+          const oldUrl = this.hostUrl ?? ""
+          clearTimeout(timeout)
+          const result = await this.opts.promote(
+            msg as unknown as TransferToMeMsg,
+            oldWs,
+            oldUrl,
+          )
+          if (result.ok) {
+            try {
+              oldWs.send(JSON.stringify({
+                type: "transfer_confirmed",
+                new_code: result.newCode,
+                new_url: result.newUrl,
+              }))
+            } catch { /* ignore */ }
+            try { oldWs.close() } catch { /* ignore */ }
+          } else {
+            try {
+              oldWs.send(JSON.stringify({
+                type: "transfer_failed",
+                reason: result.reason,
+              }))
+            } catch { /* ignore */ }
+            try { oldWs.close() } catch { /* ignore */ }
+            this.opts.ended?.(`promote_failed: ${result.reason}`)
+            this.ws = null
+            this.hostHandle = null
+            this.myHandle = null
+            this.hostUrl = null
+            await this.opts.toaster.show(
+              `promotion failed: ${result.reason}`,
+              "error",
+              "multiplayer",
+            )
+          }
+          return
+        }
+
+        if (msg.type === "transfer_start") {
+          // Close old WS and dial the new host with the new code.
+          clearTimeout(timeout)
+          if (this.ws) {
+            try { this.ws.close() } catch { /* ignore */ }
+            this.ws = null
+          }
+          const oldUrl = this.hostUrl ?? ""
+          const newHandle = typeof msg.new_handle === "string" ? msg.new_handle : "host"
+          const newUrl = typeof msg.new_url === "string" ? msg.new_url : oldUrl
+          const newCode = typeof msg.new_code === "string" ? msg.new_code : ""
+          await this.opts.toaster.show(
+            `transferring to ${newHandle} (${newUrl})`,
+            "info",
+            "multiplayer",
+          )
+          if (this.opts.reconnect && newCode) {
+            await this.opts.reconnect(newCode, newUrl)
+          }
+          return
+        }
+
+        if (msg.type === "session_ended") {
+          clearTimeout(timeout)
+          if (this.ws) {
+            try { this.ws.close() } catch { /* ignore */ }
+            this.ws = null
+          }
+          this.hostHandle = null
+          this.myHandle = null
+          this.hostUrl = null
+          const reason = typeof msg.reason === "string" ? msg.reason : "unknown"
+          this.endedReason = reason
+          await this.opts.toaster.show(
+            `session ended: ${reason}`,
+            "warning",
+            "multiplayer",
+          )
+          this.opts.ended?.(reason)
           return
         }
       })

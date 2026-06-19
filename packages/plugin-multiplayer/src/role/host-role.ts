@@ -16,6 +16,7 @@ export class HostRole implements RoleState {
   private handle: string
   private peers = new Map<Bun.ServerWebSocket<HostSocketData>, PeerInfo>()
   private volunteers = new Set<string>()
+  private graceCodes: Set<string> = new Set()
 
   constructor(
     private opts: {
@@ -80,6 +81,10 @@ export class HostRole implements RoleState {
     return null
   }
 
+  findPeerByHandle(handle: string): Bun.ServerWebSocket<HostSocketData> | null {
+    return this.findPeerWs(handle)
+  }
+
   private sendToPeer(ws: { send(data: string): unknown }, msg: { type: string; [key: string]: unknown }): void {
     try {
       ws.send(JSON.stringify(msg))
@@ -128,7 +133,7 @@ export class HostRole implements RoleState {
       }
       const normalized = code.toLowerCase()
       const isCurrent = this.code !== null && normalized === this.code
-      const isGrace = !isCurrent
+      const isGrace = !isCurrent && this.graceCodes.has(normalized)
       if (!isCurrent && !isGrace) {
         this.sendToPeer(ws, { type: "auth_fail", reason: "unknown_code" })
         this.sendToPeer(ws, { type: "bye" })
@@ -180,10 +185,27 @@ export class HostRole implements RoleState {
     await this.opts.logger.log("warn", "host: unexpected message", { msg, state: ws.data.state })
   }
 
+  addGraceCode(code: string): void {
+    this.graceCodes.add(code.toLowerCase())
+  }
+
+  hasGraceCode(code: string): boolean {
+    return this.graceCodes.has(code.toLowerCase())
+  }
+
   async start(): Promise<{ ok: true; code: string; url: string } | { ok: false; reason: string }> {
     this.code = mintCode(this.handle)
     const code = this.code
     const url = `ws://${this.opts.host}:${this.opts.port}`
+
+    // Load grace codes from state.json (codes from previous host
+    // changes that are still within their 1-hour window).
+    try {
+      const state = this.opts.state.prune(await this.opts.state.read())
+      for (const g of state.graceCodes) {
+        this.graceCodes.add(g.code)
+      }
+    } catch { /* best-effort */ }
 
     const handlers: HostServerHandlers = {
       onMessage: (ws, raw) => { void this.onMessage(ws, raw) },
