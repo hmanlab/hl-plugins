@@ -14,6 +14,12 @@ export {
   type IpcState,
   type PluginToCompanion,
   type CompanionToPlugin,
-} from "../../shared/index.ts"
-export { CHAT_MAX_TEXT, CHAT_MAX_HISTORY } from "../../shared/index.ts"
-export { makeLineParser, encode, splitLines, type StreamFrom, type LineParser } from "../../shared/index.ts"
+} from "../../plugin-multiplayer/shared/index.ts"
+export { CHAT_MAX_TEXT, CHAT_MAX_HISTORY } from "../../plugin-multiplayer/shared/index.ts"
+export {
+  makeLineParser,
+  encode,
+  splitLines,
+  type StreamFrom,
+  type LineParser,
+} from "../../plugin-multiplayer/shared/index.ts"

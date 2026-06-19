@@ -72,7 +72,7 @@ export function detectStrategy(opts: SpawnOpts): SpawnStrategy {
 
 export type SpawnInputs = {
   strategy: SpawnStrategy
-  /** Path to the companion entry, e.g. `…/companion/bin/multiplayer-watch.js` */
+  /** Path to the companion entry, e.g. `…/multiplayer-watch/bin/multiplayer-watch.js` */
   binPath: string
   /** The UDS path the companion should connect to. */
   socketPath: string

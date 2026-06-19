@@ -49,7 +49,7 @@ This is the boring-but-essential phase that makes the plugin feel like a real pr
 ### Companion recovery
 
 - If companion process crashes, auto-respawn once (NFR-R.4) — already implemented in Phase 03, validated in Phase 07
-- Recovery hint + manual `npx @hl-plugins/multiplayer-watch` fallback (Flow D)
+- Recovery hint + manual `npx @hmanlab/multiplayer-watch` fallback (Flow D)
 
 ### Reliability (PRD NFR-R.1, NFR-R.2, NFR-R.3)
 
@@ -69,7 +69,7 @@ New / updated:
 
 - `docs/development/multiplayer/architecture.md` — companion model, UDS transport, message protocol
 - `docs/development/multiplayer/cloudflare-setup.md` — from Phase 05
-- `docs/development/multiplayer/companion-fallback.md` — manual `npx @hl-plugins/multiplayer-watch` flow
+- `docs/development/multiplayer/companion-fallback.md` — manual `npx @hmanlab/multiplayer-watch` flow
 - `packages/plugin-multiplayer/README.md` — user-facing install + usage
 - Update `docs/adding-a-plugin.md` if the contract changed
 

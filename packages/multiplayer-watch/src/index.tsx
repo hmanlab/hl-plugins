@@ -1,6 +1,6 @@
 // Entry point. Renders the App with Ink using the connection
 // details from the environment (set by the plugin's spawner or by
-// `npx @hl-plugins/multiplayer-watch`).
+// `npx @hmanlab/multiplayer-watch`).
 
 import React from "react"
 import { render } from "ink"

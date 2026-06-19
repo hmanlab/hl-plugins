@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Manual fallback entry: `npx @hl-plugins/multiplayer-watch`.
+// Manual fallback entry: `npx @hmanlab/multiplayer-watch`.
 // The plugin prints this command in its toast when auto-spawn is unavailable.
 //
 // The watch process reads MP_COMPANION_SOCK and (MP_COMPANION_TOKEN or

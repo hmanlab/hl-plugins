@@ -1,13 +1,13 @@
 ---
 name: multiplayer
-description: Use when the user wants to start, join, or end a multiplayer session so two or more developers can collaborate in the same OpenCode session. Phase 03: companion pane auto-spawns (tmux / iTerm2 / detached terminal / manual `npx @hl-plugins/multiplayer-watch`); chat roundtrip over the wire; typing indicator. Phase 02 baseline still applies: multi-peer (1 host + N guests), host handoff with 10s grace, volunteer-first successor selection, 1-hour rejoin grace for old codes. Front-load keywords: multiplayer, peer, pair, connect, join, session, host, guest, invite, code, mp-, share, collaborate, transfer, volunteer, handoff, chat, typing, companion, watch, pane, mp_host, mp_join, mp_leave, mp_cancel_leave, mp_volunteer, mp_code, mp_status, mp_rejoin, mp_chat.
+description: Use when the user wants to start, join, or end a multiplayer session so two or more developers can collaborate in the same OpenCode session. Phase 03: companion pane auto-spawns (tmux / iTerm2 / detached terminal / manual `npx @hmanlab/multiplayer-watch`); chat roundtrip over the wire; typing indicator. Phase 02 baseline still applies: multi-peer (1 host + N guests), host handoff with 10s grace, volunteer-first successor selection, 1-hour rejoin grace for old codes. Front-load keywords: multiplayer, peer, pair, connect, join, session, host, guest, invite, code, mp-, share, collaborate, transfer, volunteer, handoff, chat, typing, companion, watch, pane, mp_host, mp_join, mp_leave, mp_cancel_leave, mp_volunteer, mp_code, mp_status, mp_rejoin, mp_chat.
 ---
 
 # multiplayer — multi-user sessions for OpenCode
 
 The `multiplayer-tools` plugin lets two or more `opencode` instances recognize each other and stay connected while their agents work. **Phase 03** adds the companion pane (auto-spawned into a sibling terminal region) and a chat surface — both peers see chat within 500ms on LAN, with a typing indicator while the other is composing.
 
-The companion is a separate Node + Ink TUI process that the plugin spawns into a tmux split, an iTerm2 split, or a detached terminal window. On unrecognized terminals, the plugin prints a `npx @hl-plugins/multiplayer-watch` command the user can run in any other terminal.
+The companion is a separate Node + Ink TUI process that the plugin spawns into a tmux split, an iTerm2 split, or a detached terminal window. On unrecognized terminals, the plugin prints a `npx @hmanlab/multiplayer-watch` command the user can run in any other terminal.
 
 Intents, heartbeat/crash detection, and the Cloudflare Tunnel land in later phases.
 
@@ -69,7 +69,7 @@ After `opencode` is fully initialized, the plugin spawns a **separate Node + Ink
 4. **Manual fallback** — on any other terminal, the plugin emits a toast with the command to run:
 
    ```bash
-   npx @hl-plugins/multiplayer-watch
+   npx @hmanlab/multiplayer-watch
    ```
 
    The `npx` command connects to the plugin's Unix-domain socket and renders the same UI in any other terminal.
