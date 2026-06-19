@@ -18,6 +18,8 @@ export type GuestMessage =
   | { type: "transfer_failed"; reason: string }
   | { type: "transfer_start"; new_code: string; new_url: string; new_handle: string }
   | { type: "session_ended"; reason: string }
+  | { type: "chat"; from: string; text: string; ts: number }
+  | { type: "typing"; from: string; state: "start" | "stop" }
   | { type: "bye" }
 
 export type GuestHandle = {

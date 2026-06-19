@@ -1,13 +1,15 @@
 ---
 name: multiplayer
-description: Use when the user wants to start, join, or end a multiplayer session so two or more developers can collaborate in the same OpenCode session. Phase 02: multi-peer (1 host + N guests), host handoff with 10s grace, volunteer-first successor selection, 1-hour rejoin grace for old codes. Front-load keywords: multiplayer, peer, pair, connect, join, session, host, guest, invite, code, mp-, share, collaborate, transfer, volunteer, handoff, mp_host, mp_join, mp_leave, mp_cancel_leave, mp_volunteer, mp_code, mp_status, mp_rejoin.
+description: Use when the user wants to start, join, or end a multiplayer session so two or more developers can collaborate in the same OpenCode session. Phase 03: companion pane auto-spawns (tmux / iTerm2 / detached terminal / manual `npx @hl-plugins/multiplayer-watch`); chat roundtrip over the wire; typing indicator. Phase 02 baseline still applies: multi-peer (1 host + N guests), host handoff with 10s grace, volunteer-first successor selection, 1-hour rejoin grace for old codes. Front-load keywords: multiplayer, peer, pair, connect, join, session, host, guest, invite, code, mp-, share, collaborate, transfer, volunteer, handoff, chat, typing, companion, watch, pane, mp_host, mp_join, mp_leave, mp_cancel_leave, mp_volunteer, mp_code, mp_status, mp_rejoin, mp_chat.
 ---
 
 # multiplayer — multi-user sessions for OpenCode
 
-The `multiplayer-tools` plugin lets two or more `opencode` instances recognize each other and stay connected while their agents work. **Phase 02** adds proper session semantics: when the host leaves, a guest is auto-promoted to host with a fresh code, and the old code stays valid for 1 hour for rejoin.
+The `multiplayer-tools` plugin lets two or more `opencode` instances recognize each other and stay connected while their agents work. **Phase 03** adds the companion pane (auto-spawned into a sibling terminal region) and a chat surface — both peers see chat within 500ms on LAN, with a typing indicator while the other is composing.
 
-Chat, intents, the companion pane, heartbeat/crash detection, and the Cloudflare Tunnel land in later phases.
+The companion is a separate Node + Ink TUI process that the plugin spawns into a tmux split, an iTerm2 split, or a detached terminal window. On unrecognized terminals, the plugin prints a `npx @hl-plugins/multiplayer-watch` command the user can run in any other terminal.
+
+Intents, heartbeat/crash detection, and the Cloudflare Tunnel land in later phases.
 
 ## Roles — explicit, never auto
 
@@ -53,8 +55,39 @@ MP_PORT=7332 MP_HOST=192.168.1.42 opencode
 | `mp_code` | any | Host: current invite code. Guest: host's handle. |
 | `mp_status` | any | Role, port, code, peers list, host handle, leaving-state info |
 | `mp_rejoin <code>` | any → guest | Rejoin with a grace code (valid 1 hour after the host change) |
+| `mp_chat <text>` | host or guest | Send a chat message to all peers. Same as typing in the companion pane's input box. |
 
 `mp_history` (recent host transfers) is deferred to Phase 07 — the data is already persisted in `state.json`.
+
+## Companion pane
+
+After `opencode` is fully initialized, the plugin spawns a **separate Node + Ink TUI** in a sibling terminal region:
+
+1. **tmux split** — if `$TMUX` is set and `tmux` is on `$PATH`, the current tmux pane splits horizontally.
+2. **iTerm2 split** — on macOS when the parent terminal is iTerm2, the current session splits vertically via AppleScript.
+3. **Detached terminal window** — opens a new window in Terminal.app, Windows Terminal, `gnome-terminal`, `konsole`, `xfce4-terminal`, `kitty`, `wezterm`, `alacritty`, or `ghostty`.
+4. **Manual fallback** — on any other terminal, the plugin emits a toast with the command to run:
+
+   ```bash
+   npx @hl-plugins/multiplayer-watch
+   ```
+
+   The `npx` command connects to the plugin's Unix-domain socket and renders the same UI in any other terminal.
+
+The companion shows: presence list (left), chat history (right, scrollable), input box (bottom). The plugin spawns asynchronously after the prompt is up — startup overhead is ≤ 50ms.
+
+To disable the companion entirely (e.g. for headless setups), set `MP_NO_COMPANION=1` before launching `opencode`.
+
+## Chat
+
+Chat messages are plain text typed into the companion's input box. They flow over the same WebSocket the host already uses for signaling — no new port, no new dependency.
+
+- **Sender**: types in companion → plugin sends `chat` over the wire → host fans out to other peers.
+- **Recipient**: receives `chat` from wire → companion shows it in the chat history (with the sender's handle and timestamp).
+- **Typing indicator**: when a peer focuses their input, the companion sends `typing:start`; on blur, `typing:stop`. The plugin forwards these to other peers. The recipient sees "X is typing…" in their companion header within 200ms.
+- **`/mp_chat <text>`** in the OpenCode prompt is the same path as the companion's input box. Use it when keyboard-only and the companion isn't visible.
+
+Chat is **not** persisted to `state.json` — it lives in memory only. The history cap is 500 messages, scrollable in the companion.
 
 ## Handle resolution (`MP_HANDLE`)
 

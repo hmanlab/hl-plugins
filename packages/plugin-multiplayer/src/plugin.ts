@@ -16,6 +16,10 @@ import { peerListForBroadcast } from "./role/peer-helpers.ts"
 import type { PeerInfo, Role, HostSocketData } from "./types.ts"
 import type { WireMessage } from "./protocol/index.ts"
 import { startHostServer } from "./server/index.ts"
+import { CompanionSocketServer } from "./companion/socket-server.ts"
+import { companionSocketPath, companionTokenPath } from "./companion/paths.ts"
+import { computeIpcState, pushIpcState, pushPeersUpdate, pushRoleChange } from "./companion/state-pusher.ts"
+import type { IpcState } from "../shared/protocol.ts"
 
 export type { PluginInput } from "@opencode-ai/plugin"
 
@@ -43,6 +47,9 @@ export class MultiplayerPlugin {
 
   myResolvedHandle: string | null = null
   tc: TransferController | null = null
+
+  companionServer: CompanionSocketServer | null = null
+  private companionDisabled = false
 
   constructor(toaster: Toaster, logger: Logger, store: StateStore) {
     this.toaster = toaster
@@ -96,13 +103,6 @@ export class MultiplayerPlugin {
       ws.send(JSON.stringify(msg))
     } catch {
       // ignore
-    }
-  }
-
-  private broadcastPeersUpdate(): void {
-    if (this.hostRole) {
-      const peers = peerListForBroadcast(this.hostRole.getPeers())
-      this.hostRole.broadcast({ type: "peers_update", peers })
     }
   }
 
@@ -168,12 +168,141 @@ export class MultiplayerPlugin {
     this.resetToIdleRole()
   }
 
+  /** Start the companion UDS server. Returns the server instance, or null on error.
+   *
+   * Does NOT respect `MP_NO_COMPANION` — callers (like the auto-spawn in
+   * `createMultiplayerPlugin`) check that flag themselves. This lets
+   * tests and other code start the UDS server explicitly while the
+   * auto-spawn is disabled.
+   */
+  async startCompanionServer(): Promise<CompanionSocketServer | null> {
+    if (this.companionServer && this.companionServer.isRunning()) {
+      return this.companionServer
+    }
+    const server = new CompanionSocketServer({
+      socketPath: companionSocketPath(),
+      tokenPath: companionTokenPath(),
+      handlers: {
+        onChat: (text) => {
+          void this.handleCompanionChat(text)
+        },
+        onTyping: (state) => {
+          if (this.role === "host") this.hostRole?.sendTyping(state)
+          if (this.role === "guest") this.guestRole?.sendTyping(state)
+        },
+        onCommand: (name, args) => {
+          void this.handleCompanionCommand(name, args)
+        },
+        onLeave: () => {
+          void this.mpLeave()
+        },
+        onConnect: () => {
+          // Push the current state immediately on connect
+          if (this.companionServer) {
+            this.companionServer.pushState(computeIpcState(this))
+          }
+        },
+        onDisconnect: () => {
+          // The plugin uses this for crash detection; respawn is in 3e/3f.
+        },
+        onAuthFail: (reason) => {
+          void this.logger.log("warn", "companion auth failed", { reason })
+        },
+        onParseError: (e) => {
+          void this.logger.log("warn", "companion parse error", { err: e.message })
+        },
+        onError: (e) => {
+          void this.logger.log("error", "companion server error", { err: e.message })
+        },
+      },
+    })
+    try {
+      await server.start()
+    } catch (e) {
+      await this.logger.log("warn", "companion server failed to start", { err: (e as Error).message })
+      this.companionDisabled = true
+      return null
+    }
+    this.companionServer = server
+    return server
+  }
+
+  async stopCompanionServer(): Promise<void> {
+    if (this.companionServer) {
+      this.companionServer.pushGoodbye("shutdown")
+      await this.companionServer.stop()
+      this.companionServer = null
+    }
+  }
+
+  private async handleCompanionChat(text: string): Promise<void> {
+    // Same path as /mp_chat from the OpenCode prompt.
+    await this.mpChat(text)
+    // Push the outgoing message to the companion so the user sees it in the chat history.
+    if (this.companionServer) {
+      const me = this.resolveHandle()
+      this.companionServer.pushChat({
+        from: me,
+        text,
+        ts: Date.now(),
+        mine: true,
+      })
+    }
+  }
+
+  private async handleCompanionCommand(name: string, args: string[]): Promise<void> {
+    switch (name) {
+      case "join":
+        if (args[0]) await this.mpJoin(args[0])
+        return
+      case "leave":
+        await this.mpLeave()
+        return
+      case "cancel-leave":
+        await this.mpCancelLeave()
+        return
+      case "volunteer":
+        this.mpVolunteer()
+        return
+      case "code":
+        this.companionServer?.pushToast(this.mpCode(), "info", "code")
+        return
+      case "status":
+        this.companionServer?.pushToast(this.mpStatus(), "info", "status")
+        return
+      case "intent":
+        // Phase 04 — for now, log a warning.
+        await this.logger.log("warn", "intent not yet implemented (Phase 04)")
+        this.companionServer?.pushToast("intents are coming in Phase 04", "info", "intent")
+        return
+      case "history":
+        this.companionServer?.pushToast("/mp history is coming in Phase 07", "info", "history")
+        return
+      default:
+        this.companionServer?.pushToast(`unknown command: ${name}`, "warning", "multiplayer")
+    }
+  }
+
+  /** Push a state change to all connected companions. */
+  pushStateToCompanions(): void {
+    pushIpcState(this, this.companionServer)
+  }
+
+  pushRoleChangeToCompanions(): void {
+    pushRoleChange(this, this.companionServer)
+  }
+
+  pushPeersToCompanions(): void {
+    pushPeersUpdate(this, this.companionServer)
+  }
+
   async mpHost(): Promise<string> {
     const handle = this.resolveHandle()
     const bindPort = resolvePort()
     const bindHost = resolveHost()
     const result = await this.startHost(handle, bindPort, bindHost)
     if (result.ok) {
+      this.pushRoleChangeToCompanions()
       return `Hosting on ${result.url}\nInvite code: ${result.code}\nShare the code with your peer. They run: mp_join ${result.code}\n(mp_status shows the current peers and leaving state.)`
     }
     if (result.reason.startsWith("port_") && result.reason.endsWith("_busy")) {
@@ -199,6 +328,17 @@ export class MultiplayerPlugin {
       state: this.store,
       toaster: this.toaster,
       logger: this.logger,
+      onPeersChanged: () => this.pushPeersToCompanions(),
+      onChatReceived: (msg) => {
+        if (this.companionServer) {
+          this.companionServer.pushChat({ ...msg, mine: false })
+        }
+      },
+      onTypingReceived: (from, state) => {
+        if (this.companionServer) {
+          this.companionServer.pushTyping(from, state)
+        }
+      },
     })
     const result = await hr.start()
 
@@ -214,6 +354,14 @@ export class MultiplayerPlugin {
     this.port = bindPort
     this.hostAddr = `${bindHost}:${bindPort}`
     return result
+  }
+
+  private broadcastPeersUpdate(): void {
+    if (this.hostRole) {
+      const peers = peerListForBroadcast(this.hostRole.getPeers())
+      this.hostRole.broadcast({ type: "peers_update", peers })
+    }
+    this.pushPeersToCompanions()
   }
 
   private async handleHostMessage(
@@ -365,12 +513,24 @@ export class MultiplayerPlugin {
       promote: (msg, oldWs, oldUrl) => this.promoteToHost(msg, oldWs, oldUrl),
       reconnect: (newCode, newUrl) => this.reconnectAsGuest(newCode, newUrl, "rejoin"),
       ended: (reason) => this.onGuestEnded(reason),
+      onPeersChanged: () => this.pushPeersToCompanions(),
+      onChatReceived: (msg) => {
+        if (this.companionServer) {
+          this.companionServer.pushChat({ ...msg, mine: false })
+        }
+      },
+      onTypingReceived: (from, state) => {
+        if (this.companionServer) {
+          this.companionServer.pushTyping(from, state)
+        }
+      },
     })
     const result = await gr.dial(code, "join")
     if (result.ok) {
       this.guestRole = gr
       this.guestWs = gr.getWs()
       this.setRoleGuest(gr)
+      this.pushRoleChangeToCompanions()
       return `Connected to ${result.hostHandle}. You are ${result.myHandle} in the session.`
     }
     if (result.reason === "timeout") {
@@ -412,6 +572,43 @@ export class MultiplayerPlugin {
     if (this.role === "guest")
       return this.guestRole?.getHostHandle() ? `host handle: ${this.guestRole.getHostHandle()}` : "(unknown)"
     return "Not in a session. Use mp_host or mp_join first."
+  }
+
+  mpChat(text: string): string {
+    if (this.role === "host") {
+      const result = this.hostRole?.sendChat(text)
+      if (!result) return "Not hosting."
+      if (!result.ok) return `Chat failed: ${result.reason}`
+      if (this.companionServer) {
+        this.companionServer.pushChat({
+          from: this.resolveHandle(),
+          text: text.trim(),
+          ts: Date.now(),
+          mine: true,
+        })
+      }
+      return `Sent to ${result.peers} peer(s).`
+    }
+    if (this.role === "guest") {
+      const result = this.guestRole?.sendChat(text)
+      if (!result) return "Not connected."
+      if (!result.ok) return `Chat failed: ${result.reason}`
+      if (this.companionServer) {
+        this.companionServer.pushChat({
+          from: this.resolveHandle(),
+          text: text.trim(),
+          ts: Date.now(),
+          mine: true,
+        })
+      }
+      return `Sent to ${this.guestRole?.getHostHandle() ?? "host"}.`
+    }
+    return "Not in a session. Use mp_host or mp_join first."
+  }
+
+  mpTyping(state: "start" | "stop"): void {
+    if (this.role === "host") this.hostRole?.sendTyping(state)
+    if (this.role === "guest") this.guestRole?.sendTyping(state)
   }
 
   mpStatus(): string {

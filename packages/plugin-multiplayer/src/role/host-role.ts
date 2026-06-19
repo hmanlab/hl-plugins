@@ -26,6 +26,9 @@ export class HostRole implements RoleState {
       state: StateStore
       toaster: Toaster
       logger: Logger
+      onPeersChanged?: (peers: { handle: string; joinedAt: number }[]) => void
+      onChatReceived?: (msg: { from: string; text: string; ts: number }) => void
+      onTypingReceived?: (from: string, state: "start" | "stop") => void
     },
   ) {
     this.handle = opts.handle
@@ -74,9 +77,27 @@ export class HostRole implements RoleState {
     }
   }
 
+  sendChat(text: string): { ok: true; ts: number; peers: number } | { ok: false; reason: string } {
+    const trimmed = text.trim()
+    if (trimmed.length === 0) return { ok: false, reason: "empty" }
+    if (trimmed.length > 4000) return { ok: false, reason: "too_long" }
+    if (!this.server) return { ok: false, reason: "not_hosting" }
+    const ts = Date.now()
+    const msg = { type: "chat", from: this.handle, text: trimmed, ts }
+    this.broadcast(msg)
+    return { ok: true, ts, peers: this.peers.size }
+  }
+
+  sendTyping(state: "start" | "stop"): void {
+    if (!this.server) return
+    const msg = { type: "typing", from: this.handle, state }
+    this.broadcast(msg)
+  }
+
   private broadcastPeersUpdate(): void {
     const peers = peerListForBroadcast(this.peers)
     this.broadcast({ type: "peers_update", peers })
+    this.opts.onPeersChanged?.(peers)
   }
 
   private findPeerWs(handle: string): Bun.ServerWebSocket<HostSocketData> | null {
@@ -208,6 +229,33 @@ export class HostRole implements RoleState {
     }
 
     if (msg.type === "bye") {
+      return
+    }
+
+    if (msg.type === "chat") {
+      const peer = ws.data.peer
+      if (peer.handle === "__pending__") return
+      const m = msg as unknown as { text?: unknown; ts?: unknown }
+      const text = typeof m.text === "string" ? m.text : ""
+      if (text.length === 0 || text.length > 4000) return
+      const ts = typeof m.ts === "number" ? m.ts : Date.now()
+      const out = { type: "chat", from: peer.handle, text, ts }
+      this.broadcast(out, ws)
+      this.opts.onChatReceived?.({ from: peer.handle, text, ts })
+      await this.opts.logger.log("debug", "host: chat fan-out", {
+        from: peer.handle,
+        peers: this.peers.size - 1,
+      })
+      return
+    }
+
+    if (msg.type === "typing") {
+      const peer = ws.data.peer
+      if (peer.handle === "__pending__") return
+      const state = (msg as unknown as { state?: unknown }).state === "stop" ? "stop" : "start"
+      const out = { type: "typing", from: peer.handle, state }
+      this.broadcast(out, ws)
+      this.opts.onTypingReceived?.(peer.handle, state)
       return
     }
 
