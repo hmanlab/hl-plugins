@@ -5,7 +5,7 @@
 
 ## What this is
 
-A monorepo of curated OpenCode plugins, installable via `npx hl-plugins install`.
+A monorepo of curated OpenCode plugins, installable via `npx /hl-plugins install`.
 Currently ships one plugin: `@hl-plugins/mmx` (multimodal generation via
 MiniMax / `mmx-cli`).
 

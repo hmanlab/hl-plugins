@@ -50,7 +50,7 @@ hl-plugins/
 
 ## Install flow
 
-When a user runs `npx hl-plugins install mmx`:
+When a user runs `npx /hl-plugins install mmx`:
 
 ```
 [1] Resolve plugin
@@ -143,7 +143,7 @@ The CLI auto-discovers any `packages/plugin-*/package.json` that has an `hl-plug
 ```
 +-------------------------+
 |     User terminal       |
-|  $ npx hl-plugins ...   |
+|  $ npx /hl-plugins ...   |
 +-----------+-------------+
             |
             v

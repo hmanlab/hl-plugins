@@ -7,8 +7,8 @@ A monorepo of curated OpenCode plugins, installable with a single command.
 ## Install
 
 ```bash
-npx hl-plugins install        # install all default plugins
-npx hl-plugins install mmx    # install just the mmx plugin
+npx /hl-plugins install        # install all default plugins
+npx /hl-plugins install mmx    # install just the mmx plugin
 ```
 
 ## Available plugins
@@ -19,12 +19,12 @@ npx hl-plugins install mmx    # install just the mmx plugin
 
 ## Commands
 
-- `npx hl-plugins install [plugin]` — install plugin(s) into your OpenCode
-- `npx hl-plugins uninstall [plugin]` — remove plugin(s)
-- `npx hl-plugins list` — show available and installed plugins
-- `npx hl-plugins status` — diagnose state per plugin
-- `npx hl-plugins update [plugin]` — refresh plugin files
-- `npx hl-plugins help` — show all commands
+- `npx /hl-plugins install [plugin]` — install plugin(s) into your OpenCode
+- `npx /hl-plugins uninstall [plugin]` — remove plugin(s)
+- `npx /hl-plugins list` — show available and installed plugins
+- `npx /hl-plugins status` — diagnose state per plugin
+- `npx /hl-plugins update [plugin]` — refresh plugin files
+- `npx /hl-plugins help` — show all commands
 
 ## Development
 

@@ -1,10 +1,10 @@
 {
-  "name": "hl-plugins",
+  "name": "@hmanlab/hl-plugins",
   "version": "0.1.0",
   "description": "Install curated OpenCode plugins with one command.",
   "type": "module",
   "bin": {
-    "hl-plugins": "./bin/hl-plugins.js"
+    "hl-plugins": "bin/hl-plugins.js"
   },
   "files": [
     "bin",
