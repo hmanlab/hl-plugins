@@ -29,9 +29,9 @@ export async function help(_args: string[]): Promise<number> {
   out.push(`  ${tilde(opencodeConfigDir())}/`)
   out.push("")
   out.push(ui.bold("More info:"))
-  out.push("  docs/commands.md  — full CLI reference")
-  out.push("  docs/architecture.md — install flow + plugin contract")
-  out.push("  docs/adding-a-plugin.md — how to add a new plugin")
+  out.push("  docs/commands.md  -- full CLI reference")
+  out.push("  docs/architecture.md -- install flow + plugin contract")
+  out.push("  docs/adding-a-plugin.md -- how to add a new plugin")
   ui.info(out.join("\n"))
   return 0
 }

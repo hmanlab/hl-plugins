@@ -1,7 +1,6 @@
 {
   "name": "hl-plugins",
   "version": "0.1.0",
-  "private": true,
   "description": "Install curated OpenCode plugins with one command.",
   "type": "module",
   "bin": {
@@ -9,9 +8,32 @@
   },
   "files": [
     "bin",
-    "src"
+    "dist",
+    "opencode",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
     "help": "node ./bin/hl-plugins.js help"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "cli"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hmanlab/hl-plugins.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/hmanlab/hl-plugins#readme",
+  "bugs": {
+    "url": "https://github.com/hmanlab/hl-plugins/issues"
   }
 }

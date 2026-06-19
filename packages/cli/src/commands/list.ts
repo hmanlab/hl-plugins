@@ -1,4 +1,4 @@
-// list — show all known plugins and whether they're installed.
+// list -- show all known plugins and whether they're installed.
 
 import { existsSync } from "node:fs"
 import { join } from "node:path"
@@ -24,13 +24,13 @@ export async function list(_args: string[]): Promise<number> {
     "DESCRIPTION",
   ].join("  ")
 
-  ui.info(ui.header("hl-plugins — known plugins"))
+  ui.info(ui.header("hl-plugins -- known plugins"))
   ui.info(ui.bold(header))
   for (const p of plugins) {
     const pluginTarget = p.contract.opencodePlugin
       ? join(opencodePluginDir(), p.contract.opencodePlugin.split("/").pop() ?? "")
       : null
-    const installed = pluginTarget && existsSync(pluginTarget) ? "✓" : "·"
+    const installed = pluginTarget && existsSync(pluginTarget) ? "✓" : "Â·"
     ui.info(
       [
         ui.cyan(p.name.padEnd(nameW)),

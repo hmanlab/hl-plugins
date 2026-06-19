@@ -1,4 +1,4 @@
-// status [plugin] — per-plugin diagnostic report.
+// status [plugin] -- per-plugin diagnostic report.
 // Shows: file presence, config merge state, required binaries, auth, smoke test.
 
 import { existsSync } from "node:fs"
@@ -14,7 +14,7 @@ const LABEL_W = 16
 
 function row(label: string, value: string, ok: boolean | "info"): string {
   const pad = label.padEnd(LABEL_W)
-  const mark = ok === "info" ? ui.dim("·") : ok ? ui.green("✓") : ui.red("✗")
+  const mark = ok === "info" ? ui.dim("Â·") : ok ? ui.green("✓") : ui.red("â")
   return `  ${ui.dim(pad)} ${value}  ${mark}`
 }
 
@@ -43,7 +43,7 @@ function skillDest(contractPath: string): string | null {
 }
 
 async function reportOne(plugin: PluginManifest): Promise<void> {
-  ui.info(ui.bold(`\n${plugin.name} — ${plugin.description || "(no description)"}`))
+  ui.info(ui.bold(`\n${plugin.name} -- ${plugin.description || "(no description)"}`))
 
   // Plugin file
   if (plugin.contract.opencodePlugin) {

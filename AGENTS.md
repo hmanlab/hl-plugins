@@ -13,14 +13,14 @@ MiniMax / `mmx-cli`).
 
 - **GitHub:** `git@github-zen0space:hmanlab/hl-plugins.git`
 - **Branch:** `main`
-- **Phase:** 4 of 7 (see `docs/plan.md` for the implementation roadmap)
+- **Phase:** 6 of 7 (see `docs/plan.md` for the implementation roadmap)
   - Phase 0 — scaffolding ✅
   - Phase 1 — CLI core ✅
   - Phase 2 — mmx moved into `packages/plugin-mmx/` ✅
   - Phase 3 — install flow ✅
   - Phase 4 — uninstall / status / update ✅
-  - Phase 5 — plugin registry auto-discovery ⏳
-  - Phase 6 — publish ⏳
+  - Phase 5 — plugin registry auto-discovery ✅
+  - Phase 6 — publish (prep) ✅
   - Phase 7 — CI ⏳
 
 ## Brand and naming
@@ -83,6 +83,10 @@ no CLI changes required.
 ```bash
 # from the monorepo root
 npm install
+npm run typecheck                    # tsc --noEmit
+npm run build                        # tsc -> packages/cli/dist/
+npm run clean                        # rm -rf packages/cli/dist
+
 node packages/cli/bin/hl-plugins.js help
 node packages/cli/bin/hl-plugins.js list
 node packages/cli/bin/hl-plugins.js install mmx       # full install flow
@@ -92,7 +96,22 @@ node packages/cli/bin/hl-plugins.js install            # install all default plu
 node packages/cli/bin/hl-plugins.js status mmx
 node packages/cli/bin/hl-plugins.js uninstall mmx [-y]
 node packages/cli/bin/hl-plugins.js update mmx
+
+# publish (Phase 6) — from the monorepo root, with npm auth already done
+npm run publish:cli                  # typecheck + build + npm publish --access public
 ```
+
+## Build / publish model
+
+- **Dev:** `bin/hl-plugins.js` finds `dist/index.js` (if present) or falls back to
+  running `src/index.ts` through `tsx` (no build required for hacking).
+- **Build:** `npm run build` runs `tsc -p packages/cli/tsconfig.json`,
+  emitting ESM `.js` + source maps to `packages/cli/dist/`. Strict mode,
+  `verbatimModuleSyntax: false`, `noEmit` overridden to false.
+- **Publish:** `npm run publish:cli` runs `prepublishOnly` (typecheck + build)
+  then `npm publish --workspace packages/cli --access public`. The published
+  package ships `bin/`, `dist/`, and metadata; no `tsx` needed at install time.
+- **dist/ is gitignored** — built locally, rebuilt at publish.
 
 ## Where to look
 
@@ -127,9 +146,9 @@ node packages/cli/bin/hl-plugins.js update mmx
 | 2 | Move mmx plugin into `packages/plugin-mmx/` | ✅ done |
 | 3 | Install flow (pre-flight → auth → copy → merge → verify) | ✅ done |
 | 4 | Symmetric ops (uninstall/status/update) | ✅ done |
-| 5 | Plugin registry auto-discovery | ⏳ next |
-| 6 | Publish to npm | ⏳ |
-| 7 | CI (GitHub Actions + Changesets) | ⏳ |
+| 5 | Plugin registry auto-discovery (dev + published mode) | ✅ done |
+| 6 | Publish to npm (build infra + publishable CLI) | ✅ done |
+| 7 | CI (GitHub Actions + Changesets) | ⏳ next |
 
 ## When you finish
 

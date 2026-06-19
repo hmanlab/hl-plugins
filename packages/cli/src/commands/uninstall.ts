@@ -1,4 +1,4 @@
-// uninstall [plugin] — remove plugin files and config entries.
+// uninstall [plugin] -- remove plugin files and config entries.
 // Symmetric with install: same manifest, same idempotency rules.
 // Does NOT remove the plugin's dependencies (e.g. mmx-cli) or auth.
 

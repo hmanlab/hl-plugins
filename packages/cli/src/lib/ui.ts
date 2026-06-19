@@ -1,4 +1,4 @@
-// Tiny terminal UI helpers — colors, spinners, hidden prompts.
+// Tiny terminal UI helpers -- colors, spinners, hidden prompts.
 // No third-party deps; ANSI escape codes only. Stays readable in dumb terminals.
 
 import { createInterface } from "node:readline/promises"

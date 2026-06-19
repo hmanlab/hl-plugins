@@ -1,4 +1,4 @@
-// update [plugin] — re-copy files, bump dependencies, re-merge config.
+// update [plugin] -- re-copy files, bump dependencies, re-merge config.
 // Does NOT touch auth (credentials are managed by the plugin's own CLI).
 // Symmetric with install: same copy + config-merge logic.
 

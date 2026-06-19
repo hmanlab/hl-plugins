@@ -10,7 +10,11 @@
   "scripts": {
     "dev": "node packages/cli/bin/hl-plugins.js",
     "help": "node packages/cli/bin/hl-plugins.js help",
-    "typecheck": "tsc -p packages/cli/tsconfig.json --noEmit"
+    "typecheck": "tsc -p packages/cli/tsconfig.json --noEmit",
+    "build": "tsc -p packages/cli/tsconfig.json",
+    "clean": "rm -rf packages/cli/dist",
+    "prepublishOnly": "npm run typecheck && npm run build",
+    "publish:cli": "npm run build && npm publish --workspace packages/cli --access public"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.17.8",

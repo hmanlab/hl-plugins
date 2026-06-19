@@ -1,4 +1,4 @@
-// install [plugin] — full install flow.
+// install [plugin] -- full install flow.
 //
 // Steps (mirrors docs/architecture.md):
 //   1. Resolve plugin
@@ -43,7 +43,7 @@ async function ensureRequirement(req: PluginRequirement): Promise<string> {
     const line = (probe.stdout.trim().split("\n")[0] ?? "").trim()
     return line ? `present (${line})` : "present"
   }
-  // Not present — auto-install
+  // Not present -- auto-install
   ui.info(`  ${ui.cyan("→")} installing ${req.name}: ${req.install}`)
   const install = await run(req.install, { throwOnError: false })
   if (install.code !== 0) {
@@ -141,7 +141,7 @@ async function copyPluginFiles(plugin: PluginManifest): Promise<string[]> {
 
 async function copyDir(src: string, dest: string): Promise<void> {
   mkdirSync(dest, { recursive: true })
-  // Use the shell's `cp -R` — works on macOS + Linux, no extra dep.
+  // Use the shell's `cp -R` -- works on macOS + Linux, no extra dep.
   // The `/.` trick copies contents without nesting a subdirectory.
   await run(`cp -R ${JSON.stringify(src + "/.")} ${JSON.stringify(dest)}`)
 }
@@ -192,7 +192,7 @@ type InstallOpts = {
 }
 
 async function installOne(plugin: PluginManifest, opts: InstallOpts, step: number, total: number): Promise<void> {
-  ui.info(ui.bold(`\n[${step}/${total}] ${plugin.name} — ${plugin.description}`))
+  ui.info(ui.bold(`\n[${step}/${total}] ${plugin.name} -- ${plugin.description}`))
 
   await ui.spinner("Pre-flight checks", async () => {
     await checkPreflight()
@@ -236,7 +236,7 @@ function parseArgs(args: string[]): InstallOpts & { names: string[] } {
     } else if (a === "--verbose" || a === "-v") {
       // handled below
     } else if (a.startsWith("--")) {
-      // unknown flag — ignore for now, but warn
+      // unknown flag -- ignore for now, but warn
       ui.warn(`unknown flag: ${a}`)
     } else {
       names.push(a)
