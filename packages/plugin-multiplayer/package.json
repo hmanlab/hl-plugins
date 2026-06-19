@@ -1,0 +1,12 @@
+{
+  "name": "@hl-plugins/multiplayer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Real-time multiplayer for OpenCode. Two or more developers collaborate in the same session. Phase 01: connect and disconnect only — no chat, no companion, no tunnel.",
+  "type": "module",
+  "hl-plugins": {
+    "opencodePlugin": "./opencode/plugin/multiplayer-tools.ts",
+    "opencodeSkill": "./opencode/skill/multiplayer/SKILL.md",
+    "defaultInstall": true
+  }
+}
