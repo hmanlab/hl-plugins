@@ -13,7 +13,6 @@
 // All generated files default to ~/Desktop/mmx-output/.
 
 import { tool } from "@opencode-ai/plugin"
-import { $ } from "bun"
 import { homedir } from "node:os"
 import { join, resolve, isAbsolute } from "node:path"
 import { mkdirSync, existsSync } from "node:fs"
@@ -27,6 +26,16 @@ function resolveOutDir(outDir: string | undefined, worktree: string): string {
 
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+}
+
+async function runMmx(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const proc = Bun.spawn(["mmx", ...args], { stdout: "pipe", stderr: "pipe" })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  return { stdout, stderr, exitCode }
 }
 
 export default async () => {
@@ -74,20 +83,17 @@ export default async () => {
         async execute(args, ctx) {
           const outDir = resolveOutDir(args.out_dir, ctx.worktree)
           ensureDir(outDir)
-          const extra: string[] = []
-          if (args.aspect_ratio) extra.push(`--aspect-ratio ${args.aspect_ratio}`)
-          if (args.n) extra.push(`--n ${args.n}`)
-          if (args.seed != null) extra.push(`--seed ${args.seed}`)
-          if (args.optimize_prompt) extra.push(`--prompt-optimizer`)
-          extra.push(`--out-dir ${outDir}`)
-          extra.push(`--out-prefix ${args.filename_prefix ?? "image"}`)
-          extra.push(`--non-interactive`)
-          const proc = await $`mmx image generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
-          if (proc.exitCode !== 0) {
-            return `mmx image generate failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
+          const cliArgs = ["image", "generate", "--prompt", args.prompt]
+          if (args.aspect_ratio) cliArgs.push("--aspect-ratio", args.aspect_ratio)
+          if (args.n) cliArgs.push("--n", String(args.n))
+          if (args.seed != null) cliArgs.push("--seed", String(args.seed))
+          if (args.optimize_prompt) cliArgs.push("--prompt-optimizer")
+          cliArgs.push("--out-dir", outDir, "--out-prefix", args.filename_prefix ?? "image", "--non-interactive")
+          const { stdout, stderr, exitCode } = await runMmx(cliArgs)
+          if (exitCode !== 0) {
+            return `mmx image generate failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
-          const out = proc.stdout.toString().trim()
-          return `Image generation complete.\n\n${out}\n\nSaved to: ${outDir}`
+          return `Image generation complete.\n\n${stdout.trim()}\n\nSaved to: ${outDir}`
         },
       }),
 
@@ -118,14 +124,13 @@ export default async () => {
           const outPath =
             args.out_path ?? join(DEFAULT_OUT_DIR, `speech-${Date.now()}.mp3`)
           ensureDir(outPath.replace(/\/[^/]+$/, ""))
-          const extra: string[] = []
-          if (args.voice) extra.push(`--voice ${args.voice}`)
-          if (args.speed != null) extra.push(`--speed ${args.speed}`)
-          extra.push(`--out ${outPath}`)
-          extra.push(`--non-interactive`)
-          const proc = await $`mmx speech synthesize --text ${args.text} ${extra.join(" ")}`.nothrow()
-          if (proc.exitCode !== 0) {
-            return `mmx speech synthesize failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
+          const cliArgs = ["speech", "synthesize", "--text", args.text]
+          if (args.voice) cliArgs.push("--voice", args.voice)
+          if (args.speed != null) cliArgs.push("--speed", String(args.speed))
+          cliArgs.push("--out", outPath, "--non-interactive")
+          const { stdout, stderr, exitCode } = await runMmx(cliArgs)
+          if (exitCode !== 0) {
+            return `mmx speech synthesize failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
           return `Speech synthesized.\n\nSaved to: ${outPath}`
         },
@@ -154,13 +159,12 @@ export default async () => {
           const outPath =
             args.out_path ?? join(DEFAULT_OUT_DIR, `video-${Date.now()}.mp4`)
           ensureDir(outPath.replace(/\/[^/]+$/, ""))
-          const extra: string[] = []
-          if (args.model) extra.push(`--model ${args.model}`)
-          extra.push(`--download ${outPath}`)
-          extra.push(`--non-interactive`)
-          const proc = await $`mmx video generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
-          if (proc.exitCode !== 0) {
-            return `mmx video generate failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
+          const cliArgs = ["video", "generate", "--prompt", args.prompt]
+          if (args.model) cliArgs.push("--model", args.model)
+          cliArgs.push("--download", outPath, "--non-interactive")
+          const { stdout, stderr, exitCode } = await runMmx(cliArgs)
+          if (exitCode !== 0) {
+            return `mmx video generate failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
           return `Video generation complete.\n\nSaved to: ${outPath}`
         },
@@ -198,16 +202,15 @@ export default async () => {
           const outPath =
             args.out_path ?? join(DEFAULT_OUT_DIR, `music-${Date.now()}.mp3`)
           ensureDir(outPath.replace(/\/[^/]+$/, ""))
-          const extra: string[] = []
-          if (args.lyrics) extra.push(`--lyrics ${args.lyrics}`)
-          if (args.instrumental) extra.push(`--instrumental`)
-          if (args.vocals) extra.push(`--vocals ${args.vocals}`)
-          if (args.bpm != null) extra.push(`--bpm ${args.bpm}`)
-          extra.push(`--out ${outPath}`)
-          extra.push(`--non-interactive`)
-          const proc = await $`mmx music generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
-          if (proc.exitCode !== 0) {
-            return `mmx music generate failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
+          const cliArgs = ["music", "generate", "--prompt", args.prompt]
+          if (args.lyrics) cliArgs.push("--lyrics", args.lyrics)
+          if (args.instrumental) cliArgs.push("--instrumental")
+          if (args.vocals) cliArgs.push("--vocals", args.vocals)
+          if (args.bpm != null) cliArgs.push("--bpm", String(args.bpm))
+          cliArgs.push("--out", outPath, "--non-interactive")
+          const { stdout, stderr, exitCode } = await runMmx(cliArgs)
+          if (exitCode !== 0) {
+            return `mmx music generate failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
           return `Music generation complete.\n\nSaved to: ${outPath}`
         },
@@ -223,11 +226,19 @@ export default async () => {
           query: tool.schema.string().describe("The search query."),
         },
         async execute(args, ctx) {
-          const proc = await $`mmx search query --q ${args.query} --output json --non-interactive`.nothrow()
-          if (proc.exitCode !== 0) {
-            return `mmx search failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
+          const { stdout, stderr, exitCode } = await runMmx([
+            "search",
+            "query",
+            "--q",
+            args.query,
+            "--output",
+            "json",
+            "--non-interactive",
+          ])
+          if (exitCode !== 0) {
+            return `mmx search failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
-          return proc.stdout.toString().trim() || "(no results)"
+          return stdout.trim() || "(no results)"
         },
       }),
 
@@ -247,14 +258,14 @@ export default async () => {
             .describe("Custom question about the image. Default 'Describe the image.'"),
         },
         async execute(args, ctx) {
-          const extra: string[] = []
-          if (args.prompt) extra.push(`--prompt ${args.prompt}`)
-          extra.push(`--non-interactive`)
-          const proc = await $`mmx vision describe --image ${args.image} ${extra.join(" ")}`.nothrow()
-          if (proc.exitCode !== 0) {
-            return `mmx vision describe failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
+          const cliArgs = ["vision", "describe", "--image", args.image]
+          if (args.prompt) cliArgs.push("--prompt", args.prompt)
+          cliArgs.push("--non-interactive")
+          const { stdout, stderr, exitCode } = await runMmx(cliArgs)
+          if (exitCode !== 0) {
+            return `mmx vision describe failed (exit ${exitCode}):\n${stderr || stdout || "(no output)"}`
           }
-          return proc.stdout.toString().trim() || "(no description)"
+          return stdout.trim() || "(no description)"
         },
       }),
 
@@ -266,11 +277,18 @@ export default async () => {
           "Show current Token Plan usage and remaining quota (5-hour rolling and weekly windows). Use when the user asks about quota, usage, limits, or how many calls they have left.",
         args: {},
         async execute(_args, ctx) {
-          const proc = await $`mmx quota`.nothrow()
-          if (proc.exitCode !== 0) {
-            return `mmx quota failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || "(no stderr)"}`
+          let { stdout, stderr, exitCode } = await runMmx(["quota"])
+          if (exitCode !== 0) {
+            const fallback = await runMmx(["quota", "show", "--non-interactive"])
+            if (fallback.exitCode === 0) {
+              stdout = fallback.stdout
+              stderr = fallback.stderr
+              exitCode = fallback.exitCode
+            } else {
+              return `mmx quota failed (exit ${exitCode}):\n${stderr || "(no stderr)"}`
+            }
           }
-          const raw = proc.stdout.toString().trim()
+          const raw = stdout.trim()
           let data: any
           try {
             data = JSON.parse(raw)
