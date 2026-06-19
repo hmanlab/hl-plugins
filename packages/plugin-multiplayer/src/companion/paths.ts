@@ -1,5 +1,5 @@
 // Companion UDS / token paths. The plugin uses these so the
-// `npx @hl-plugins/multiplayer-watch` fallback (and the in-process
+// `npx @hmanlab/multiplayer-watch` fallback (and the in-process
 // spawner) can find the right per-user socket.
 
 import { join } from "node:path"

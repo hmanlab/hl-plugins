@@ -40,7 +40,7 @@ The plugin picks the first available strategy:
 1. **tmux split** — if `$TMUX` is set and `tmux` is on `$PATH`, split the current pane horizontally and run the companion in the new pane
 2. **iTerm2 split** — macOS only, when the parent terminal is iTerm2 (detected via `ITERM_SESSION_ID` or `TERM_PROGRAM=iTerm.app`); use AppleScript to split the current session
 3. **Detached terminal window** — open a new window in the user's default terminal emulator: Terminal.app (macOS), Windows Terminal (Windows), or `gnome-terminal` / `konsole` / `xfce4-terminal` / `kitty` / `wezterm` / `alacritty` / `ghostty` (Linux, in that preference order; honor `$TERMINAL` if set)
-4. **Manual fallback** — print a single line to the OpenCode stderr and emit a toast: `Run "npx @hl-plugins/multiplayer-watch" in another terminal` and continue. The plugin re-checks every 10s for up to 5 minutes for the watch process to attach, then proceeds without it (the companion is opt-in but not required for the session to function)
+4. **Manual fallback** — print a single line to the OpenCode stderr and emit a toast: `Run "npx @hmanlab/multiplayer-watch" in another terminal` and continue. The plugin re-checks every 10s for up to 5 minutes for the watch process to attach, then proceeds without it (the companion is opt-in but not required for the session to function)
 
 ### Chat
 
@@ -54,7 +54,7 @@ The plugin picks the first available strategy:
 
 - **Spawned async** after OpenCode's TUI is fully initialized (F-5.6) — never blocks startup
 - **Killed cleanly** when OpenCode exits (host) or when the user runs `/mp leave` (guest) — F-5.8
-- **Auto-respawn once** on crash — NFR-R.4; after that, a recovery hint is shown and the user can relaunch via `npx @hl-plugins/multiplayer-watch`
+- **Auto-respawn once** on crash — NFR-R.4; after that, a recovery hint is shown and the user can relaunch via `npx @hmanlab/multiplayer-watch`
 
 ### In-TUI bridge (toasts only)
 
@@ -96,7 +96,7 @@ The plugin picks the first available strategy:
 - [ ] Companion process exits cleanly within 1s of OpenCode exit
 - [ ] If companion is killed manually (`kill -9 <pid>`), plugin auto-respawns it once
 - [ ] NFR-PF.4: measured OpenCode startup overhead ≤ 50ms
-- [ ] On a terminal the plugin does not recognize, prints `Run "npx @hl-plugins/multiplayer-watch" in another terminal` and the session continues without a companion
+- [ ] On a terminal the plugin does not recognize, prints `Run "npx @hmanlab/multiplayer-watch" in another terminal` and the session continues without a companion
 - [ ] Companion never draws to the OpenCode TUI's stdout
 
 ---
@@ -159,9 +159,9 @@ pgrep -f "hl-plugins/multiplayer" | xargs kill -9
 # Run opencode from a terminal the plugin does not recognize
 # (e.g. a minimal linux console)
 opencode
-# expect: toast [multiplayer] Run "npx @hl-plugins/multiplayer-watch" in another terminal
+# expect: toast [multiplayer] Run "npx @hmanlab/multiplayer-watch" in another terminal
 # In another terminal:
-npx @hl-plugins/multiplayer-watch
+npx @hmanlab/multiplayer-watch
 # expect: companion appears in that terminal
 ```
 
@@ -196,7 +196,7 @@ packages/multiplayer-watch/
 │   │   └── uds.ts                        # Unix domain socket / named pipe client
 │   └── protocol.ts                       # shared message types
 └── bin/
-    └── multiplayer-watch.js              # `npx @hl-plugins/multiplayer-watch` entry
+    └── multiplayer-watch.js              # `npx @hmanlab/multiplayer-watch` entry
 
 # New: shared protocol (used by both in-proc plugin and companion)
 packages/plugin-multiplayer/shared/

@@ -208,7 +208,7 @@ The plugin picks the first available strategy from this list:
 1. **tmux split** — if `$TMUX` is set and `tmux` is on `$PATH`, split the current pane horizontally and run the companion in the new pane.
 2. **iTerm2 split** — macOS only, when the parent terminal is iTerm2 (detected via `ITERM_SESSION_ID` or `TERM_PROGRAM=iTerm.app`); use AppleScript to split the current session.
 3. **Detached terminal window** — open a new window in the user's default terminal emulator: Terminal.app (macOS), Windows Terminal (Windows), or `gnome-terminal` / `konsole` / `xfce4-terminal` / `kitty` / `wezterm` / `alacritty` / `ghostty` (Linux, in that preference order; honor `$TERMINAL` if set).
-4. **Manual fallback** — print a single line to the OpenCode stderr / first toast: `Run "npx @hl-plugins/multiplayer-watch" in another terminal` and continue. The plugin re-checks every 10s for up to 5 minutes for the watch process to attach, then proceeds without it (the companion is opt-in but not required for the session to function).
+4. **Manual fallback** — print a single line to the OpenCode stderr / first toast: `Run "npx @hmanlab/multiplayer-watch" in another terminal` and continue. The plugin re-checks every 10s for up to 5 minutes for the watch process to attach, then proceeds without it (the companion is opt-in but not required for the session to function).
 
 - **F-5.6** Spawn decision and execution happen **after** OpenCode's TUI is fully initialized, so they never block the prompt or startup (see NFR-PF.4).
 - **F-5.7** Spawn failure is non-fatal: log a clear warning, fall through to the next strategy, and ultimately to manual mode. The plugin emits exactly one toast telling the user how to launch the companion manually.
@@ -298,11 +298,11 @@ All commands also accept the `/mp` prefix when entered in the OpenCode prompt (e
 - **NFR-R.1** Plugin handles network blips gracefully (≤30s reconnect window)
 - **NFR-R.2** Plugin handles Bob's machine crash without freezing Carol's UI
 - **NFR-R.3** Plugin handles tunnel death (e.g., cloudflared restart) by re-detecting
-- **NFR-R.4** If the companion pane process crashes, the plugin auto-respawns it once (F-5.8); after that, a recovery hint is shown and the user can relaunch via `npx @hl-plugins/multiplayer-watch`
+- **NFR-R.4** If the companion pane process crashes, the plugin auto-respawns it once (F-5.8); after that, a recovery hint is shown and the user can relaunch via `npx @hmanlab/multiplayer-watch`
 
 ### Compatibility
 
-- **NFR-C.1** Works on macOS, Linux, Windows (WSL) — requires one of: `tmux` (any OS), iTerm2 (macOS), Terminal.app (macOS), Windows Terminal, `gnome-terminal`, `konsole`, `xfce4-terminal`, `kitty`, `wezterm`, `alacritty`, or `ghostty` for auto-spawn. Falls back to manual `npx @hl-plugins/multiplayer-watch` if none detected.
+- **NFR-C.1** Works on macOS, Linux, Windows (WSL) — requires one of: `tmux` (any OS), iTerm2 (macOS), Terminal.app (macOS), Windows Terminal, `gnome-terminal`, `konsole`, `xfce4-terminal`, `kitty`, `wezterm`, `alacritty`, or `ghostty` for auto-spawn. Falls back to manual `npx @hmanlab/multiplayer-watch` if none detected.
 - **NFR-C.2** Requires Node 18+ and Bun runtime (OpenCode's runtime); the companion process itself only needs Node 18+ (Bun is inherited from the parent when possible)
 - **NFR-C.3** Works with OpenCode v1.x
 
@@ -419,7 +419,7 @@ The **in-process plugin code** (everything except the companion) runs inside Ope
 
 1. Bob runs `opencode` from inside a terminal the plugin does not recognize (e.g. a minimal `linux` console or a proprietary terminal without an AppleScript bridge)
 2. `companion-spawner` walks through tmux / iTerm2 / detached-window strategies — all fail
-3. Plugin prints a single line to the OpenCode stderr and emits a toast: `Run "npx @hl-plugins/multiplayer-watch" in another terminal`
+3. Plugin prints a single line to the OpenCode stderr and emits a toast: `Run "npx @hmanlab/multiplayer-watch" in another terminal`
 4. Bob opens a second terminal and runs the command
 5. Watch process attaches via the UDS; companion pane appears in that terminal
 6. Plugin continues normally — the session does not block on the companion
@@ -445,7 +445,7 @@ The **in-process plugin code** (everything except the companion) runs inside Ope
 | D-13 | File locks | Out of scope | Intent broadcast is enough |
 | D-14 | Real-time co-edit | Out of scope (v1+) | Use VS Code Live Share |
 | D-15 | Future hosted signaling | After funding | Zero-friction onboarding |
-| D-16 | UI surface | Companion TUI pane in a sibling terminal region | OpenCode's plugin API exposes no sidebar/panel; a separate Node + Ink process gives the rich UI without violating the API. Auto-spawn strategy order: tmux split → iTerm2 split → detached terminal window → manual `npx @hl-plugins/multiplayer-watch` |
+| D-16 | UI surface | Companion TUI pane in a sibling terminal region | OpenCode's plugin API exposes no sidebar/panel; a separate Node + Ink process gives the rich UI without violating the API. Auto-spawn strategy order: tmux split → iTerm2 split → detached terminal window → manual `npx @hmanlab/multiplayer-watch` |
 
 ---
 
@@ -517,7 +517,7 @@ The **in-process plugin code** (everything except the companion) runs inside Ope
 | OpenCode plugin API gains a sidebar/panel and the companion-pane approach becomes redundant | Low | Low | Track upstream; pivot the in-TUI bridge to use the new API as an alternative entry point while keeping the companion |
 | Auto-transfer race conditions | Medium | High | Comprehensive test suite (8+ edge cases) |
 | Bob's machine firewall blocks incoming | High (~15%) | High | Auto-cascade to next successor |
-| Companion pane fails to auto-spawn on an unrecognized terminal | Medium | Low | Manual fallback: `npx @hl-plugins/multiplayer-watch` (F-5.6, Flow D). Session is not blocked on the companion |
+| Companion pane fails to auto-spawn on an unrecognized terminal | Medium | Low | Manual fallback: `npx @hmanlab/multiplayer-watch` (F-5.6, Flow D). Session is not blocked on the companion |
 | Companion process crashes mid-session | Low | Medium | Auto-respawn once (NFR-R.4); after that, recovery hint + manual relaunch |
 | Handle collisions (two "bob"s) | Low | Low | Append random suffix on first run, editable |
 | Plugin breaks on OpenCode API changes | Medium | High | Pin OpenCode version, monitor GH issues |
