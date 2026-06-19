@@ -1,6 +1,6 @@
 {
   "name": "@hl-plugins/multiplayer",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": true,
   "description": "Real-time multiplayer for OpenCode. Two or more developers collaborate in the same session. Phase 03: companion pane auto-spawns (tmux / iTerm2 / detached terminal); chat roundtrip; typing indicator.",
   "type": "module",

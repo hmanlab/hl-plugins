@@ -1,6 +1,6 @@
 {
   "name": "@hl-plugins/mmx",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": true,
   "description": "Multimodal generation via MiniMax (image, video, music, speech, search, vision, quota).",
   "type": "module",
