@@ -65,9 +65,9 @@ MP_PORT=7332 MP_HOST=192.168.1.42 opencode
 The companion is launched explicitly by the user via `mp_watch`. It opens as a new tab in the user's terminal:
 
 1. **tmux split** — if `$TMUX` is set and `tmux` is on `$PATH`, the current tmux pane splits horizontally.
-2. **tmux detached** — if `tmux` is on `$PATH` but `$TMUX` is not set (you're not in a tmux session), a fresh detached tmux session named `multiplayer-companion` is created. Attach to it later with `tmux attach -t multiplayer-companion`. Override the session name with `MP_COMPANION_TMUX_SESSION=mysession`.
-3. **iTerm2 tab** — on macOS when the parent terminal is iTerm2, a new tab is opened in the current iTerm2 window via AppleScript.
-4. **Detached terminal tab** — on Windows Terminal, a new tab is opened via `wt new-tab`. On Linux, a new tab is opened in `gnome-terminal` / `konsole` / `wezterm`. On macOS (Terminal.app), a new window is opened.
+2. **iTerm2 tab** — on macOS when the parent terminal is iTerm2, a new tab is opened in the current iTerm2 window via AppleScript.
+3. **Detached terminal tab** — on macOS Terminal.app a new window is opened via AppleScript; on Windows Terminal a new tab is opened via `wt new-tab`; on Linux a new tab is opened in `gnome-terminal` / `konsole` / `wezterm`.
+4. **tmux detached** — last resort: if `tmux` is on `$PATH` but no native terminal is recognised, a fresh detached tmux session named `multiplayer-companion` is created. Attach to it later with `tmux attach -t multiplayer-companion`. Override the session name with `MP_COMPANION_TMUX_SESSION=mysession`.
 5. **Manual fallback** — on any other terminal, the plugin emits a toast with the command to run:
 
    ```bash

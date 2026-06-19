@@ -1,12 +1,16 @@
 // Spawn strategies for the companion TUI process.
 //
-// The plugin picks the first viable strategy from:
+// The plugin picks the first viable strategy from (priority order):
 //   1. tmux split            (if $TMUX is set and tmux is on $PATH)
-//   2. tmux detached         (if tmux is on $PATH but $TMUX is not set —
-//                             creates a fresh detached session)
-//   3. iTerm2 tab            (macOS only, when the parent terminal is iTerm2)
-//   4. Detached terminal     (Terminal.app / Windows Terminal / tab-capable Linux terminals)
+//   2. iTerm2 tab            (macOS only, when the parent terminal is iTerm2)
+//   3. Detached terminal     (Terminal.app / Windows Terminal / tab-capable Linux terminals)
+//   4. tmux detached         (last resort: tmux on $PATH but no native terminal)
 //   5. Manual fallback       (print a command the user can run)
+//
+// Note: `tmux-detached` is a LAST RESORT. Platform-native terminals always
+// win. v0.3.5 incorrectly returned `tmux-detached` whenever `tmux` was on
+// $PATH, which broke macOS Terminal.app users with Homebrew tmux installed.
+// v0.3.6 prioritises the OS-native terminal first.
 //
 // Each strategy is a pure function (no side effects) so it can be
 // unit-tested without actually spawning anything. The spawn helpers
@@ -36,6 +40,11 @@ export type SpawnOpts = {
   env: SpawnerEnv
   hasBinary?: (bin: string) => boolean
   execPath?: string
+  /**
+   * Override `process.platform` for testing. Defaults to `platform()`.
+   * Accepts `"darwin" | "linux" | "win32" | ...`.
+   */
+  platform?: NodeJS.Platform
 }
 
 function defaultHasBinary(bin: string): boolean {
@@ -51,17 +60,18 @@ export function detectStrategy(opts: SpawnOpts): SpawnStrategy {
     return "manual"
   }
   const hasBin = opts.hasBinary ?? defaultHasBinary
-  // Already inside a tmux session → split current pane.
+  const os = opts.platform ?? platform()
+  // 1. Already inside a tmux session → split current pane.
   if (opts.env.TMUX && hasBin("tmux")) return "tmux"
-  // tmux available but user is NOT in a session → create a detached
-  // session the user can attach to later.
-  if (hasBin("tmux")) return "tmux-detached"
+  // 2. iTerm2 detected (macOS only, requires AppleScript).
   if ((opts.env.TERM_PROGRAM === "iTerm.app" || opts.env.ITERM_SESSION_ID) && hasBin("osascript")) {
     return "iterm2"
   }
-  // Detached window — pick by platform.
-  if (platform() === "darwin" && hasBin("osascript")) return "detached"
-  if (platform() === "win32" && hasBin("wt.exe")) return "detached"
+  // 3. Platform-native terminal — always preferred over `tmux-detached`.
+  //    A user with Homebrew tmux installed but using Terminal.app gets a
+  //    Terminal.app window, not a detached tmux session.
+  if (os === "darwin" && hasBin("osascript")) return "detached"
+  if (os === "win32" && hasBin("wt.exe")) return "detached"
   const linuxTerminals = [
     opts.env.TERMINAL,
     "gnome-terminal",
@@ -75,6 +85,10 @@ export function detectStrategy(opts: SpawnOpts): SpawnStrategy {
   for (const t of linuxTerminals) {
     if (hasBin(t)) return "detached"
   }
+  // 4. Last resort: tmux is on PATH but no native terminal recognised.
+  //    Create a detached session the user can attach to later.
+  if (hasBin("tmux")) return "tmux-detached"
+  // 5. Nothing supported.
   return "manual"
 }
 

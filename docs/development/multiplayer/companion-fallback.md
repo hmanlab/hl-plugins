@@ -10,18 +10,20 @@ If `npx` itself is missing from `PATH`, `mp_watch` returns a clear error telling
 
 ## Auto-spawn strategy order
 
-The plugin picks the first viable strategy from:
+The plugin picks the first viable strategy from (priority order):
 
 | Priority | Strategy | When it triggers | What runs |
 |---|---|---|---|
 | 1 | `tmux` | `$TMUX` is set AND `tmux` is on `$PATH` | `tmux split-window -h -c <cwd> <cmd>` |
-| 2 | `tmux-detached` | `tmux` is on `$PATH` but `$TMUX` is NOT set | `tmux new-session -d -s multiplayer-companion -c <cwd> <cmd>` |
-| 3 | `iterm2` | `TERM_PROGRAM=iTerm.app` or `ITERM_SESSION_ID` set, `osascript` on PATH | AppleScript: `create tab with default profile` |
+| 2 | `iterm2` | `TERM_PROGRAM=iTerm.app` or `ITERM_SESSION_ID` set, `osascript` on PATH | AppleScript: `create tab with default profile` |
+| 3 | `detached` (macOS) | darwin + `osascript` on PATH (Terminal.app) | `tell application "Terminal" do script "<cmd>"` |
 | 4 | `detached` (Windows) | `wt.exe` on PATH | `wt new-tab -d <cwd> -- <cmd>` |
 | 5 | `detached` (Linux) | `gnome-terminal`, `konsole`, `wezterm` on PATH | Tab variant: `--tab` / `--new-tab` / `wezterm cli spawn` |
-| 6 | `detached` (macOS) | `osascript` on PATH (Terminal.app) | `tell application "Terminal" do script "<cmd>"` |
-| 7 | `detached` (Linux, window-only) | `alacritty`, `ghostty`, `kitty`, `xfce4-terminal` on PATH | New window (no CLI tab API) |
+| 6 | `detached` (Linux, window-only) | `alacritty`, `ghostty`, `kitty`, `xfce4-terminal` on PATH | New window (no CLI tab API) |
+| 7 | `tmux-detached` | Last resort: `tmux` on PATH but no native terminal recognised | `tmux new-session -d -s multiplayer-companion -c <cwd> <cmd>` |
 | 8 | `manual` | Nothing supported | Print `npx -y @hmanlab/multiplayer-watch` |
+
+**Note:** `tmux-detached` is a LAST RESORT. Platform-native terminals always win. v0.3.5 incorrectly returned `tmux-detached` whenever `tmux` was on `$PATH`, which broke macOS Terminal.app users with Homebrew tmux installed — they got a detached tmux session instead of a Terminal.app window. v0.3.6 prioritises the OS-native terminal first.
 
 The default `<cmd>` is `npx -y @hmanlab/multiplayer-watch`, prefixed with `MP_COMPANION_SOCK=... MP_COMPANION_TOKEN=...` so the companion can authenticate with the plugin's UDS server.
 

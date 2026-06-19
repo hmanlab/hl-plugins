@@ -36,16 +36,6 @@ describe("detectStrategy", () => {
     expect(detectStrategy({ env, hasBinary: (b) => b === "tmux" })).toBe("tmux")
   })
 
-  it("returns 'tmux-detached' when tmux is on $PATH but $TMUX is unset", () => {
-    const env: SpawnerEnv = { PATH }
-    expect(detectStrategy({ env, hasBinary: (b) => b === "tmux" })).toBe("tmux-detached")
-  })
-
-  it("does NOT return 'tmux-detached' when tmux is not on $PATH", () => {
-    const env: SpawnerEnv = { PATH }
-    expect(detectStrategy({ env, hasBinary: () => false })).not.toBe("tmux-detached")
-  })
-
   it("returns 'iterm2' when TERM_PROGRAM=iTerm.app", () => {
     const env: SpawnerEnv = { TERM_PROGRAM: "iTerm.app", PATH }
     expect(detectStrategy({ env, hasBinary: (b) => b === "osascript" })).toBe("iterm2")
@@ -59,6 +49,87 @@ describe("detectStrategy", () => {
   it("returns 'manual' when no strategy is viable", () => {
     const env: SpawnerEnv = { PATH }
     expect(detectStrategy({ env, hasBinary: () => false })).toBe("manual")
+  })
+
+  // v0.3.6: platform-native terminals take priority over `tmux-detached`.
+  // A user with Homebrew tmux installed but using Terminal.app gets a
+  // Terminal.app window, not a detached tmux session.
+
+  it("macOS Terminal.app + tmux installed + osascript: returns 'detached' (not 'tmux-detached')", () => {
+    const env: SpawnerEnv = { PATH }
+    expect(
+      detectStrategy({
+        env,
+        hasBinary: (b) => b === "tmux" || b === "osascript",
+        platform: "darwin",
+      }),
+    ).toBe("detached")
+  })
+
+  it("macOS Terminal.app + tmux installed + NO osascript: returns 'tmux-detached'", () => {
+    const env: SpawnerEnv = { PATH }
+    expect(
+      detectStrategy({
+        env,
+        hasBinary: (b) => b === "tmux",
+        platform: "darwin",
+      }),
+    ).toBe("tmux-detached")
+  })
+
+  it("iTerm2 + tmux installed: returns 'iterm2' (not 'tmux-detached')", () => {
+    const env: SpawnerEnv = { TERM_PROGRAM: "iTerm.app", PATH }
+    expect(
+      detectStrategy({
+        env,
+        hasBinary: (b) => b === "tmux" || b === "osascript",
+        platform: "darwin",
+      }),
+    ).toBe("iterm2")
+  })
+
+  it("Windows Terminal + tmux: returns 'detached' (not 'tmux-detached')", () => {
+    const env: SpawnerEnv = { PATH }
+    expect(
+      detectStrategy({
+        env,
+        hasBinary: (b) => b === "tmux" || b === "wt.exe",
+        platform: "win32",
+      }),
+    ).toBe("detached")
+  })
+
+  it("Linux server with only tmux (no recognised terminal): returns 'tmux-detached'", () => {
+    const env: SpawnerEnv = { PATH }
+    expect(
+      detectStrategy({
+        env,
+        hasBinary: (b) => b === "tmux",
+        platform: "linux",
+      }),
+    ).toBe("tmux-detached")
+  })
+
+  it("Linux + gnome-terminal + tmux: returns 'detached' (not 'tmux-detached')", () => {
+    const env: SpawnerEnv = { PATH }
+    expect(
+      detectStrategy({
+        env,
+        hasBinary: (b) => b === "tmux" || b === "gnome-terminal",
+        platform: "linux",
+      }),
+    ).toBe("detached")
+  })
+
+  it("does NOT return 'tmux-detached' when tmux is not on $PATH (linux)", () => {
+    const env: SpawnerEnv = { PATH }
+    expect(
+      detectStrategy({
+        env,
+        hasBinary: () => false,
+        platform: "linux",
+      }),
+    ).not.toBe("tmux-detached")
   })
 })
 
