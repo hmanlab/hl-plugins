@@ -98,6 +98,7 @@ import {
 } from "../../src/handle/index.ts"
 import { Toaster, Logger } from "../../src/bridge/index.ts"
 import { StateStore, readHandleFileSync, writeHandleFile } from "../../src/persistence/index.ts"
+import { startHostServer } from "../../src/server/index.ts"
 
 // ── Module state ──────────────────────────────────────────────────────────
 
@@ -282,39 +283,27 @@ async function startHost(
   const code = hostCode
   const url = `ws://${bindHost}:${bindPort}`
 
-  try {
-    hostServer = Bun.serve<HostSocketData>({
-      port: bindPort,
-      hostname: bindHost,
-      fetch(req, srv) {
-        const upgraded = srv.upgrade(req, {
-          data: { state: "awaiting_auth" },
-        })
-        if (upgraded) return
-        return new Response("multiplayer: websocket only", { status: 400 })
-      },
-      websocket: {
-        message(ws, raw) {
-          void handleHostMessage(ws, raw, toast, log)
-        },
-        close(ws) {
-          void handleHostClose(ws, toast, log)
-        },
-      },
-    })
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException
-    hostServer = null
+  const serverResult = await startHostServer({
+    port: bindPort,
+    host: bindHost,
+    handlers: {
+      onMessage(ws, raw) { void handleHostMessage(ws, raw, toast, log) },
+      onClose(ws) { void handleHostClose(ws, toast, log) },
+    },
+  })
+
+  if (!serverResult.ok) {
     hostCode = null
     hostHandle = null
-    if (err?.code === "EADDRINUSE") {
+    if (serverResult.reason.startsWith("port_")) {
       await log("warn", "host start failed: port in use", { port: bindPort })
-      return { ok: false, reason: `port_${bindPort}_busy` }
+    } else {
+      await log("error", "host start failed", { error: serverResult.reason })
     }
-    await log("error", "host start failed", { error: String(e) })
-    return { ok: false, reason: `start_failed: ${(e as Error).message}` }
+    return { ok: false, reason: serverResult.reason }
   }
 
+  hostServer = serverResult.server
   role = "host"
   port = bindPort
   hostAddr = `${bindHost}:${bindPort}`
@@ -885,71 +874,34 @@ async function becomeSuccessorHost(
   hostHandle = msg.new_handle
   hostCode = newCode
 
-  try {
-    hostServer = Bun.serve<HostSocketData>({
-      port: newPort,
-      hostname: newBindHost,
-      fetch(req, srv) {
-        const upgraded = srv.upgrade(req, {
-          data: { state: "awaiting_auth" },
-        })
-        if (upgraded) return
-        return new Response("multiplayer: websocket only", { status: 400 })
-      },
-      websocket: {
-        message(ws, raw) {
-          void handleHostMessage(ws, raw, toast, log)
-        },
-        close(ws) {
-          void handleHostClose(ws, toast, log)
-        },
-      },
-    })
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException
-    hostServer = null
+  const serverResult = await startHostServer({
+    port: newPort,
+    host: newBindHost,
+    handlers: {
+      onMessage(ws, raw) { void handleHostMessage(ws, raw, toast, log) },
+      onClose(ws) { void handleHostClose(ws, toast, log) },
+    },
+  })
+
+  if (!serverResult.ok) {
     hostCode = null
     hostHandle = null
-    if (err?.code === "EADDRINUSE") {
-      await log("error", "successor failed to start host: port in use", { port: newPort })
-      try {
-        oldHostWs.send(
-          JSON.stringify({ type: "transfer_failed", reason: "port_busy" } satisfies WireMessage),
-        )
-      } catch {
-        // ignore
-      }
-      try {
-        oldHostWs.close()
-      } catch {
-        // ignore
-      }
-      guestWs = null
-      role = "idle"
-      guestHostHandle = null
-      guestMyHandle = null
-      guestHostUrl = null
-      await toast(`could not bind port ${newPort} as new host`, "error", "multiplayer")
-      return
-    }
-    await log("error", "successor failed to start host", { error: String(e) })
+    const reason = serverResult.reason.startsWith("port_") ? "port_busy" : "start_failed"
+    await log("error", "successor failed to start host", { error: serverResult.reason, reason })
     try {
-      oldHostWs.send(
-        JSON.stringify({ type: "transfer_failed", reason: "start_failed" } satisfies WireMessage),
-      )
-    } catch {
-      // ignore
-    }
-    try {
-      oldHostWs.close()
-    } catch {
-      // ignore
-    }
+      oldHostWs.send(JSON.stringify({ type: "transfer_failed", reason } satisfies WireMessage))
+    } catch { /* ignore */ }
+    try { oldHostWs.close() } catch { /* ignore */ }
     guestWs = null
     role = "idle"
+    guestHostHandle = null
+    guestMyHandle = null
+    guestHostUrl = null
+    await toast(`could not bind port ${newPort} as new host`, "error", "multiplayer")
     return
   }
 
+  hostServer = serverResult.server
   role = "host"
   port = newPort
   hostAddr = `${newBindHost}:${newPort}`
