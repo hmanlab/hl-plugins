@@ -5,12 +5,13 @@ import { JOIN_TIMEOUT_MS } from "../constants.ts"
 import { startHostServer } from "../server/index.ts"
 import type { PeerInfo } from "../types.ts"
 import type { WireMessage } from "../protocol/index.ts"
+import type { RoleState } from "./role-state.ts"
 
 export type DialResult =
   | { ok: true; hostHandle: string; myHandle: string }
   | { ok: false; reason: string; transferTo?: { new_code: string; new_url: string; new_handle: string } }
 
-export class GuestRole {
+export class GuestRole implements RoleState {
   readonly kind = "guest" as const
 
   private ws: WebSocket | null = null
@@ -154,5 +155,9 @@ export class GuestRole {
     this.hostHandle = null
     this.myHandle = null
     this.hostUrl = null
+  }
+
+  dispose(): void {
+    this.leave()
   }
 }

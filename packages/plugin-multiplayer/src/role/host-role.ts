@@ -6,8 +6,9 @@ import type { HostServerHandlers } from "../server/index.ts"
 import { startHostServer } from "../server/index.ts"
 import { mintCode, parseCode, assignCollisionSuffix, isValidCode } from "../handle/index.ts"
 import { peerListForBroadcast } from "./peer-helpers.ts"
+import type { RoleState } from "./role-state.ts"
 
-export class HostRole {
+export class HostRole implements RoleState {
   readonly kind = "host" as const
 
   private server: ReturnType<typeof Bun.serve> | null = null
@@ -218,5 +219,10 @@ export class HostRole {
     this.handle = ""
     this.peers = new Map()
     this.volunteers = new Set()
+  }
+
+  dispose(): void {
+    this.transfer?.reset()
+    this.stop()
   }
 }

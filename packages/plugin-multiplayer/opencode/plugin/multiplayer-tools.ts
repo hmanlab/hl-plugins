@@ -98,15 +98,19 @@ import {
 import { Toaster, Logger } from "../../src/bridge/index.ts"
 import { StateStore, readHandleFileSync, writeHandleFile } from "../../src/persistence/index.ts"
 import { startHostServer } from "../../src/server/index.ts"
-import { HostRole, GuestRole, TransferController } from "../../src/role/index.ts"
+import { HostRole, GuestRole, TransferController, IdleRole, type RoleState } from "../../src/role/index.ts"
 import { peerListForBroadcast } from "../../src/role/peer-helpers.ts"
 
 // ── Module state ──────────────────────────────────────────────────────────
 
 let store: StateStore
 let role: Role = "idle"
+let roleState: RoleState
 let port = DEFAULT_PORT
 let hostAddr = `${DEFAULT_HOST}:${DEFAULT_PORT}`
+
+let toaster: Toaster
+let logger: Logger
 
 let hostServer: ReturnType<typeof Bun.serve> | null = null
 let hostCode: string | null = null
@@ -122,6 +126,21 @@ let guestMyHandle: string | null = null
 let guestHostUrl: string | null = null
 
 let myResolvedHandle: string | null = null
+
+function resetToIdleRole(): void {
+  role = "idle"
+  roleState = new IdleRole({ handle: resolveHandle(), port, hostAddr, store, toaster, logger })
+}
+
+function setRoleHost(hr: HostRole): void {
+  role = "host"
+  roleState = hr
+}
+
+function setRoleGuest(gr: GuestRole): void {
+  role = "guest"
+  roleState = gr
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -235,7 +254,7 @@ function cleanup(): void {
   guestHostHandle = null
   guestMyHandle = null
   guestHostUrl = null
-  role = "idle"
+  resetToIdleRole()
 }
 
 // ── State persistence helpers ────────────────────────────────────────────
@@ -252,8 +271,8 @@ async function startHost(
   toaster: Toaster,
   logger: Logger,
 ): Promise<{ ok: true; code: string; url: string } | { ok: false; reason: string }> {
-  if (role !== "idle") {
-    return { ok: false, reason: `not_idle (currently ${role})` }
+  if (roleState.kind !== "idle") {
+    return { ok: false, reason: `not_idle (currently ${roleState.kind})` }
   }
 
   const hr = new HostRole({ port: bindPort, host: bindHost, handle, state: store, toaster, logger })
@@ -267,7 +286,7 @@ async function startHost(
   hostServer = null
   hostCode = result.code
   hostHandle = handle
-  role = "host"
+  setRoleHost(hr)
   port = bindPort
   hostAddr = `${bindHost}:${bindPort}`
   return result
@@ -587,7 +606,7 @@ async function dialHost(
           // ignore
         }
         guestWs = null
-        role = "idle"
+        resetToIdleRole()
         guestHostHandle = null
         guestMyHandle = null
         guestHostUrl = null
@@ -602,7 +621,7 @@ async function dialHost(
         )
         if (!rejoin.ok) {
           await toast(`rejoin after transfer failed: ${rejoin.reason}`, "error", "multiplayer")
-          role = "idle"
+          resetToIdleRole()
           finish({ ok: false, reason: rejoin.reason })
           return
         }
@@ -620,7 +639,7 @@ async function dialHost(
           // ignore
         }
         guestWs = null
-        role = "idle"
+        resetToIdleRole()
         guestHostHandle = null
         guestMyHandle = null
         guestHostUrl = null
@@ -693,7 +712,7 @@ async function becomeSuccessorHost(
     } catch { /* ignore */ }
     try { oldHostWs.close() } catch { /* ignore */ }
     guestWs = null
-    role = "idle"
+    resetToIdleRole()
     guestHostHandle = null
     guestMyHandle = null
     guestHostUrl = null
@@ -749,14 +768,17 @@ async function becomeSuccessorHost(
 
 export default async (input: PluginInput) => {
   store = new StateStore(resolveHandle)
-  const toaster = new Toaster(input.client)
-  const logger = new Logger(input.client)
+  toaster = new Toaster(input.client)
+  logger = new Logger(input.client)
   const toast = toToastFn(toaster)
   const log = toLogFn(logger)
   const handle = resolveHandle()
   const envPort = resolvePort()
   const envHost = resolveHost()
   hostAddr = `${envHost}:${envPort}`
+
+  const idleDeps = { handle, port: envPort, hostAddr, store, toaster, logger }
+  roleState = new IdleRole(idleDeps)
 
   tc = new TransferController(
     {
@@ -776,7 +798,7 @@ export default async (input: PluginInput) => {
           hostCode = null
           hostHandle = null
           hostPeers = new Map()
-          role = "idle"
+          roleState = new IdleRole(idleDeps)
         }
       },
       recordSessionEnded: (h, r) => store.recordSessionEnded(h, r),
@@ -802,11 +824,12 @@ export default async (input: PluginInput) => {
 
   // Plugin load is a no-op. No port binding, no async work. The plugin
   // is ready to receive tool calls immediately.
-  await log("debug", "plugin loaded", { handle, port: envPort, host: envHost, role })
+  await log("debug", "plugin loaded", { handle, port: envPort, host: envHost, role: roleState.kind })
 
   return {
     dispose: async () => {
       cleanup()
+      roleState = new IdleRole(idleDeps)
     },
     tool: {
       mp_host: tool({
@@ -848,7 +871,7 @@ export default async (input: PluginInput) => {
           if (result.ok) {
             guestRole = gr
             guestWs = gr.getWs()
-            role = "guest"
+            setRoleGuest(gr)
             return `Connected to ${result.hostHandle}. You are ${result.myHandle} in the session.`
           }
           if (result.reason === "timeout") {
@@ -870,7 +893,7 @@ export default async (input: PluginInput) => {
           if (role === "guest") {
             guestRole?.leave()
             guestRole = null
-            role = "idle"
+            resetToIdleRole()
             return "Left the session."
           }
           return "Not in a session."
@@ -977,7 +1000,7 @@ export default async (input: PluginInput) => {
           if (result.ok) {
             guestRole = gr
             guestWs = gr.getWs()
-            role = "guest"
+            setRoleGuest(gr)
             return `Rejoined as guest (${result.myHandle}). Connected to ${result.hostHandle}.`
           }
           if (result.reason === "timeout") {
