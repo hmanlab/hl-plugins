@@ -1,6 +1,6 @@
 {
   "name": "@hmanlab/hl-plugins",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "One-command installer for curated OpenCode plugins. Adds image, video, music, and speech generation to your coding agent without leaving the chat. MIT, no telemetry.",
   "type": "module",
   "bin": {
