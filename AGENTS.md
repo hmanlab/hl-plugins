@@ -86,6 +86,12 @@ no CLI changes required.
 5. **API key input is hidden.** Use `inquirer` password type or equivalent.
 6. **No telemetry.** This is a personal/brand tool.
 7. **Plugin-agnostic CLI.** CLI knows the contract, not specific plugins.
+8. **Never publish to npm.** The agent MUST NOT run `npm publish`,
+   `npm run publish:cli`, or push git tags. Only the human owner
+   (`khairul`) publishes. The agent may bump versions, write release
+   notes, and update the publish workflow — but the actual `npm publish`
+   and the `git push --tags` step are the human's call. See
+   `docs/notes/publishing.md` for the documented flows.
 
 ## Commands
 
