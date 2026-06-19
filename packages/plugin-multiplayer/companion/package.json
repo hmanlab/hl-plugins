@@ -1,23 +1,21 @@
 {
-  "name": "@hl-plugins/multiplayer-companion",
+  "name": "@hl-plugins/multiplayer-watch",
   "version": "0.3.0",
-  "private": true,
-  "description": "Companion TUI for @hl-plugins/multiplayer. Renders presence, chat, and a chat-first input box. Connects to the in-proc plugin over a Unix domain socket. Auto-spawned into a tmux / iTerm2 / detached terminal pane, or launched manually with `npx @hl-plugins/multiplayer-watch`.",
   "type": "module",
+  "description": "Companion TUI for the multiplayer plugin. Presence, chat, and chat-first input box over a Unix domain socket.",
   "bin": {
     "multiplayer-watch": "./bin/multiplayer-watch.js"
-  },
-  "scripts": {
-    "start": "node bin/multiplayer-watch.js"
-  },
-  "dependencies": {
-    "ink": "^7.1.0",
-    "react": "^19.2.7"
   },
   "engines": {
     "node": ">=18"
   },
-  "devDependencies": {
-    "@types/react": "^19.2.17"
+  "files": [
+    "bin",
+    "src"
+  ],
+  "dependencies": {
+    "ink": "^7.1.0",
+    "react": "^19.2.7",
+    "tsx": "^4.22.4"
   }
 }
