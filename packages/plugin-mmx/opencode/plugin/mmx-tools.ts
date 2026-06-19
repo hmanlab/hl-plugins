@@ -13,6 +13,7 @@
 // All generated files default to ~/Desktop/mmx-output/.
 
 import { tool } from "@opencode-ai/plugin"
+import { $ } from "bun"
 import { homedir } from "node:os"
 import { join, resolve, isAbsolute } from "node:path"
 import { mkdirSync, existsSync } from "node:fs"
@@ -81,7 +82,7 @@ export default async () => {
           extra.push(`--out-dir ${outDir}`)
           extra.push(`--out-prefix ${args.filename_prefix ?? "image"}`)
           extra.push(`--non-interactive`)
-          const proc = await ctx.$`mmx image generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
+          const proc = await $`mmx image generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
           if (proc.exitCode !== 0) {
             return `mmx image generate failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
           }
@@ -122,7 +123,7 @@ export default async () => {
           if (args.speed != null) extra.push(`--speed ${args.speed}`)
           extra.push(`--out ${outPath}`)
           extra.push(`--non-interactive`)
-          const proc = await ctx.$`mmx speech synthesize --text ${args.text} ${extra.join(" ")}`.nothrow()
+          const proc = await $`mmx speech synthesize --text ${args.text} ${extra.join(" ")}`.nothrow()
           if (proc.exitCode !== 0) {
             return `mmx speech synthesize failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
           }
@@ -157,7 +158,7 @@ export default async () => {
           if (args.model) extra.push(`--model ${args.model}`)
           extra.push(`--download ${outPath}`)
           extra.push(`--non-interactive`)
-          const proc = await ctx.$`mmx video generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
+          const proc = await $`mmx video generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
           if (proc.exitCode !== 0) {
             return `mmx video generate failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
           }
@@ -204,7 +205,7 @@ export default async () => {
           if (args.bpm != null) extra.push(`--bpm ${args.bpm}`)
           extra.push(`--out ${outPath}`)
           extra.push(`--non-interactive`)
-          const proc = await ctx.$`mmx music generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
+          const proc = await $`mmx music generate --prompt ${args.prompt} ${extra.join(" ")}`.nothrow()
           if (proc.exitCode !== 0) {
             return `mmx music generate failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
           }
@@ -222,7 +223,7 @@ export default async () => {
           query: tool.schema.string().describe("The search query."),
         },
         async execute(args, ctx) {
-          const proc = await ctx.$`mmx search query --q ${args.query} --output json --non-interactive`.nothrow()
+          const proc = await $`mmx search query --q ${args.query} --output json --non-interactive`.nothrow()
           if (proc.exitCode !== 0) {
             return `mmx search failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
           }
@@ -249,7 +250,7 @@ export default async () => {
           const extra: string[] = []
           if (args.prompt) extra.push(`--prompt ${args.prompt}`)
           extra.push(`--non-interactive`)
-          const proc = await ctx.$`mmx vision describe --image ${args.image} ${extra.join(" ")}`.nothrow()
+          const proc = await $`mmx vision describe --image ${args.image} ${extra.join(" ")}`.nothrow()
           if (proc.exitCode !== 0) {
             return `mmx vision describe failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || proc.stdout.toString() || "(no output)"}`
           }
@@ -265,12 +266,12 @@ export default async () => {
           "Show current Token Plan usage and remaining quota (5-hour rolling and weekly windows). Use when the user asks about quota, usage, limits, or how many calls they have left.",
         args: {},
         async execute(_args, ctx) {
-          const proc = await ctx.$`mmx quota show --output json --non-interactive`.nothrow()
+          const proc = await $`mmx quota show --output json --non-interactive`.nothrow()
           if (proc.exitCode === 0) {
             const out = proc.stdout.toString().trim()
             if (out) return out
           }
-          const fallback = await ctx.$`mmx quota show --non-interactive`.nothrow()
+          const fallback = await $`mmx quota show --non-interactive`.nothrow()
           return fallback.stdout.toString().trim() || fallback.stderr.toString().trim() || "(no quota info)"
         },
       }),
