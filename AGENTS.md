@@ -13,7 +13,7 @@ MiniMax / `mmx-cli`).
 
 - **GitHub:** `git@github-zen0space:hmanlab/hl-plugins.git`
 - **Branch:** `main`
-- **Phase:** 6 of 7 (see `docs/plan.md` for the implementation roadmap)
+- **Phase:** 7 of 7 — **complete** (see `docs/plan.md` for the implementation roadmap)
   - Phase 0 — scaffolding ✅
   - Phase 1 — CLI core ✅
   - Phase 2 — mmx moved into `packages/plugin-mmx/` ✅
@@ -21,7 +21,16 @@ MiniMax / `mmx-cli`).
   - Phase 4 — uninstall / status / update ✅
   - Phase 5 — plugin registry auto-discovery ✅
   - Phase 6 — publish (prep) ✅
-  - Phase 7 — CI ⏳
+  - Phase 7 — CI ✅
+
+## Release flow
+
+1. Bump `version` in `packages/cli/package.json` (manually for v1).
+2. Commit: `git commit -am "release: vX.Y.Z"`.
+3. Tag: `git tag vX.Y.Z`.
+4. Push: `git push origin main --tags`.
+5. `.github/workflows/publish.yml` runs `npm run prepublishOnly` (typecheck + build)
+   then `npm run publish:cli`. Requires the `NPM_TOKEN` secret.
 
 ## Brand and naming
 
@@ -148,7 +157,7 @@ npm run publish:cli                  # typecheck + build + npm publish --access 
 | 4 | Symmetric ops (uninstall/status/update) | ✅ done |
 | 5 | Plugin registry auto-discovery (dev + published mode) | ✅ done |
 | 6 | Publish to npm (build infra + publishable CLI) | ✅ done |
-| 7 | CI (GitHub Actions + Changesets) | ⏳ next |
+| 7 | CI (GitHub Actions on PR + tag-triggered publish) | ✅ done |
 
 ## When you finish
 

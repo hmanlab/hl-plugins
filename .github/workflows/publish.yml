@@ -1,0 +1,35 @@
+name: Publish
+
+# Triggers on a tag push matching `v*` (e.g. `v0.1.0`).
+# Requires the `NPM_TOKEN` secret to be set in the repo
+# (Settings → Secrets and variables → Actions).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # for npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry: 'https://registry.npmjs.org'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run prepublishOnly   # typecheck + build
+      - name: Bump version to match tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm --workspace packages/cli version "$VERSION" --no-git-tag-version
+      - name: Publish
+        run: npm run publish:cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
