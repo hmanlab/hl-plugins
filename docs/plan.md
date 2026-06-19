@@ -10,7 +10,7 @@ OpenCode plugins are powerful, but installing them is friction:
 - Set up auth + dependencies separately
 - Reverse the whole thing to uninstall
 
-`hl-plugins` turns all of that into one command: `npx /hl-plugins install <plugin>`.
+`hl-plugins` turns all of that into one command. After `npm install -g @hmanlab/hl-plugins`, a single `hl-plugins install <plugin>` does everything.
 
 ## Brand
 
@@ -22,7 +22,7 @@ OpenCode plugins are powerful, but installing them is friction:
 
 ## Goals
 
-1. **One-command install** — `npx /hl-plugins install <plugin>` does everything
+1. **One-command install** — `npm install -g @hmanlab/hl-plugins`, then `hl-plugins install <plugin>`
 2. **Idempotent** — safe to re-run; detects existing install
 3. **Clean uninstall** — fully reversible, no orphan files or config entries
 4. **Plugin-agnostic** — adding a new plugin = drop a folder, zero CLI changes

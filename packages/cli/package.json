@@ -1,7 +1,7 @@
 {
   "name": "@hmanlab/hl-plugins",
-  "version": "0.1.7",
-  "description": "Install curated OpenCode plugins with one command.",
+  "version": "0.2.0",
+  "description": "One-command installer for curated OpenCode plugins. Adds image, video, music, and speech generation to your coding agent without leaving the chat. MIT, no telemetry.",
   "type": "module",
   "bin": {
     "hl-plugins": "bin/hl-plugins.js"
@@ -23,8 +23,18 @@
   },
   "keywords": [
     "opencode",
+    "opencode-plugin",
     "plugin",
-    "cli"
+    "cli",
+    "installer",
+    "multimodal",
+    "image-generation",
+    "video-generation",
+    "music-generation",
+    "text-to-speech",
+    "mmx",
+    "MiniMax",
+    "token-plan"
   ],
   "license": "MIT",
   "repository": {
