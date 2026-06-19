@@ -2,13 +2,16 @@
 //
 // The plugin picks the first viable strategy from:
 //   1. tmux split            (if $TMUX is set and tmux is on $PATH)
-//   2. iTerm2 split          (macOS only, when the parent terminal is iTerm2)
-//   3. Detached terminal     (Terminal.app / gnome-terminal / konsole / etc.)
-//   4. Manual fallback       (print a command the user can run)
+//   2. tmux detached         (if tmux is on $PATH but $TMUX is not set —
+//                             creates a fresh detached session)
+//   3. iTerm2 tab            (macOS only, when the parent terminal is iTerm2)
+//   4. Detached terminal     (Terminal.app / Windows Terminal / tab-capable Linux terminals)
+//   5. Manual fallback       (print a command the user can run)
 //
 // Each strategy is a pure function (no side effects) so it can be
 // unit-tested without actually spawning anything. The spawn helpers
-// (`spawnTmux`, `spawnIterm2`, `spawnDetached`) execute the strategy.
+// (`spawnTmux`, `spawnTmuxDetached`, `spawnIterm2`, `spawnDetached`)
+// execute the strategy.
 //
 // `disableAutoSpawn` (env MP_NO_COMPANION) forces the manual fallback,
 // useful for tests and for users who never want a sibling pane.
@@ -17,7 +20,7 @@ import { spawn as nodeSpawn, type ChildProcess } from "node:child_process"
 import { existsSync } from "node:fs"
 import { homedir, platform, userInfo } from "node:os"
 
-export type SpawnStrategy = "tmux" | "iterm2" | "detached" | "manual"
+export type SpawnStrategy = "tmux" | "tmux-detached" | "iterm2" | "detached" | "manual"
 
 export type SpawnerEnv = {
   TMUX?: string | undefined
@@ -26,6 +29,7 @@ export type SpawnerEnv = {
   TERMINAL?: string | undefined
   PATH?: string | undefined
   MP_NO_COMPANION?: string | undefined
+  MP_COMPANION_TMUX_SESSION?: string | undefined
 }
 
 export type SpawnOpts = {
@@ -47,7 +51,11 @@ export function detectStrategy(opts: SpawnOpts): SpawnStrategy {
     return "manual"
   }
   const hasBin = opts.hasBinary ?? defaultHasBinary
+  // Already inside a tmux session → split current pane.
   if (opts.env.TMUX && hasBin("tmux")) return "tmux"
+  // tmux available but user is NOT in a session → create a detached
+  // session the user can attach to later.
+  if (hasBin("tmux")) return "tmux-detached"
   if ((opts.env.TERM_PROGRAM === "iTerm.app" || opts.env.ITERM_SESSION_ID) && hasBin("osascript")) {
     return "iterm2"
   }
@@ -101,6 +109,8 @@ export function spawnStrategy(inputs: SpawnInputs): SpawnResult {
   switch (inputs.strategy) {
     case "tmux":
       return spawnTmux(inputs)
+    case "tmux-detached":
+      return spawnTmuxDetached(inputs)
     case "iterm2":
       return spawnIterm2(inputs)
     case "detached":
@@ -130,14 +140,32 @@ function spawnTmux(inputs: SpawnInputs): SpawnResult {
   }
 }
 
+function spawnTmuxDetached(inputs: SpawnInputs): SpawnResult {
+  const command = buildCompanionCommand(inputs)
+  const session = process.env["MP_COMPANION_TMUX_SESSION"] ?? "multiplayer-companion"
+  const args = ["new-session", "-d", "-s", session, "-c", inputs.cwd ?? process.cwd(), command]
+  try {
+    const child = nodeSpawn("tmux", args, {
+      stdio: "ignore",
+      detached: true,
+    })
+    child.unref()
+    return { ok: true, strategy: "tmux-detached", pid: child.pid ?? null, command }
+  } catch (e) {
+    return { ok: false, strategy: "tmux-detached", reason: (e as Error).message, command }
+  }
+}
+
 function spawnIterm2(inputs: SpawnInputs): SpawnResult {
   const command = buildCompanionCommand(inputs)
   const escaped = command.replace(/"/g, '\\"')
   const script = `
     tell application "iTerm2"
-      set newSession to (split current session of current window vertically with default profile)
-      tell newSession
-        write text "${escaped}"
+      tell current window
+        create tab with default profile
+        tell current session
+          write text "${escaped}"
+        end tell
       end tell
     end tell
   `.trim()
@@ -150,6 +178,40 @@ function spawnIterm2(inputs: SpawnInputs): SpawnResult {
     return { ok: true, strategy: "iterm2", pid: child.pid ?? null, command }
   } catch (e) {
     return { ok: false, strategy: "iterm2", reason: (e as Error).message, command }
+  }
+}
+
+// Build the args array for a detached terminal spawn. Pure function —
+// testable without actually spawning anything.
+export function buildDetachedArgs(term: string, inputs: SpawnInputs): string[] {
+  const cwd = inputs.cwd ?? process.cwd()
+  const command = buildCompanionCommand(inputs)
+  switch (term) {
+    // --- macOS ---
+    case "Terminal":
+      // Terminal.app doesn't have a clean new-tab AppleScript without
+      // UI scripting / Accessibility permissions. Open a new window.
+      return ["-e", command]
+    // --- Windows ---
+    case "wt.exe":
+      return ["new-tab", "-d", cwd, "--", "node", inputs.binPath]
+    // --- Linux: tab-capable terminals ---
+    case "gnome-terminal":
+      return ["--tab", "--working-directory", cwd, "--", "bash", "-lc", command]
+    case "konsole":
+      return ["--new-tab", "--workdir", cwd, "-e", "bash", "-lc", command]
+    case "wezterm":
+      return ["start", "--cwd", cwd, "--", "bash", "-lc", command]
+    case "kitty":
+      return ["--directory", cwd, "bash", "-lc", command]
+    // --- Linux: window-only terminals (no CLI tab API) ---
+    case "xfce4-terminal":
+      return ["--working-directory", cwd, "-e", `bash -lc '${command.replace(/'/g, "'\\''")}'`]
+    case "alacritty":
+    case "ghostty":
+      return ["--working-directory", cwd, "-e", "bash", "-lc", command]
+    default:
+      return ["-e", "bash", "-lc", command]
   }
 }
 
@@ -169,7 +231,8 @@ function spawnDetached(inputs: SpawnInputs): SpawnResult {
       return { ok: true, strategy: "detached", pid: child.pid ?? null, command }
     }
     if (os === "win32") {
-      const child = nodeSpawn("wt.exe", ["-d", inputs.cwd ?? process.cwd(), "node", inputs.binPath], {
+      const args = buildDetachedArgs("wt.exe", inputs)
+      const child = nodeSpawn("wt.exe", args, {
         stdio: "ignore",
         detached: true,
         env: {
@@ -194,35 +257,7 @@ function spawnDetached(inputs: SpawnInputs): SpawnResult {
     ].filter((t): t is string => typeof t === "string")
     for (const term of linuxOrder) {
       if (!existsSync(`/usr/bin/${term}`) && !defaultHasBinary(term)) continue
-      let args: string[]
-      switch (term) {
-        case "gnome-terminal":
-          args = ["--working-directory", inputs.cwd ?? process.cwd(), "--", "bash", "-lc", command]
-          break
-        case "konsole":
-          args = ["--workdir", inputs.cwd ?? process.cwd(), "-e", "bash", "-lc", command]
-          break
-        case "kitty":
-          args = ["--directory", inputs.cwd ?? process.cwd(), "bash", "-lc", command]
-          break
-        case "xfce4-terminal":
-          args = [
-            "--working-directory",
-            inputs.cwd ?? process.cwd(),
-            "-e",
-            `bash -lc '${command.replace(/'/g, "'\\''")}'`,
-          ]
-          break
-        case "wezterm":
-          args = ["start", "--cwd", inputs.cwd ?? process.cwd(), "--", "bash", "-lc", command]
-          break
-        case "alacritty":
-        case "ghostty":
-          args = ["--working-directory", inputs.cwd ?? process.cwd(), "-e", "bash", "-lc", command]
-          break
-        default:
-          args = ["-e", "bash", "-lc", command]
-      }
+      const args = buildDetachedArgs(term, inputs)
       const child = nodeSpawn(term, args, {
         stdio: "ignore",
         detached: true,

@@ -103,7 +103,10 @@ export async function createMultiplayerPlugin(input: PluginInput) {
 
   // Start the companion UDS server asynchronously so it never blocks the
   // OpenCode prompt (NFR-PF.4: ≤ 50ms plugin startup overhead).
-  // `MP_NO_COMPANION=1` disables the auto-spawn entirely (tests use this).
+  // The plugin auto-spawns the companion in a new tab when possible
+  // (tmux split, iTerm2 tab, Windows Terminal tab, Linux tab-capable
+  // terminals). `MP_NO_COMPANION=1` disables the auto-spawn entirely
+  // (tests use this).
   let companionSpawned = false
   if (process.env["MP_NO_COMPANION"] === "1" || process.env["MP_NO_COMPANION"] === "true") {
     // No-op: tests and power users can still call startCompanionServer directly.
@@ -266,7 +269,7 @@ export async function createMultiplayerPlugin(input: PluginInput) {
 
       mp_watch: tool({
         description:
-          "Launch the companion TUI pane in a sibling terminal (presence, chat, input box). Auto-detects tmux/iTerm2/detached terminal; falls back to npx auto-install.",
+          "Launch the companion TUI pane in a new tab (tmux, iTerm2, Windows Terminal, or tab-capable Linux terminal). Falls back to npx auto-install.",
         args: {},
         async execute() {
           const server = await plugin.startCompanionServer()

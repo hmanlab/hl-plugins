@@ -1,6 +1,6 @@
 {
   "name": "hl-plugins-monorepo",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Curated OpenCode plugins, installable with one command.",
   "type": "module",

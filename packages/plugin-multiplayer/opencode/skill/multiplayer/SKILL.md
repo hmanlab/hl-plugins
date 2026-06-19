@@ -1,6 +1,6 @@
 ---
 name: multiplayer
-description: Use when the user wants to start, join, or end a multiplayer session so two or more developers can collaborate in the same OpenCode session. Phase 03: companion pane auto-spawns (tmux / iTerm2 / detached terminal / manual `npx @hmanlab/multiplayer-watch`); chat roundtrip over the wire; typing indicator. Phase 02 baseline still applies: multi-peer (1 host + N guests), host handoff with 10s grace, volunteer-first successor selection, 1-hour rejoin grace for old codes. Front-load keywords: multiplayer, peer, pair, connect, join, session, host, guest, invite, code, mp-, share, collaborate, transfer, volunteer, handoff, chat, typing, companion, watch, pane, mp_host, mp_join, mp_leave, mp_cancel_leave, mp_volunteer, mp_code, mp_status, mp_rejoin, mp_chat.
+description: Use when the user wants to start, join, or end a multiplayer session so two or more developers can collaborate in the same OpenCode session. Phase 03: companion pane auto-spawns in a new tab (tmux detached session / iTerm2 tab / Windows Terminal tab / tab-capable Linux terminals / manual `npx @hmanlab/multiplayer-watch`); chat roundtrip over the wire; typing indicator. Phase 02 baseline still applies: multi-peer (1 host + N guests), host handoff with 10s grace, volunteer-first successor selection, 1-hour rejoin grace for old codes. Front-load keywords: multiplayer, peer, pair, connect, join, session, host, guest, invite, code, mp-, share, collaborate, transfer, volunteer, handoff, chat, typing, companion, watch, pane, mp_host, mp_join, mp_leave, mp_cancel_leave, mp_volunteer, mp_code, mp_status, mp_rejoin, mp_chat.
 ---
 
 # multiplayer — multi-user sessions for OpenCode
@@ -56,18 +56,19 @@ MP_PORT=7332 MP_HOST=192.168.1.42 opencode
 | `mp_status` | any | Role, port, code, peers list, host handle, leaving-state info |
 | `mp_rejoin <code>` | any → guest | Rejoin with a grace code (valid 1 hour after the host change) |
 | `mp_chat <text>` | host or guest | Send a chat message to all peers. Same as typing in the companion pane's input box. |
-| `mp_watch` | any | Launch the companion TUI pane in a sibling terminal (presence, chat, input box). |
+| `mp_watch` | any | Launch the companion TUI pane in a new tab (tmux, iTerm2, Windows Terminal, or tab-capable Linux terminal). |
 
 `mp_history` (recent host transfers) is deferred to Phase 07 — the data is already persisted in `state.json`.
 
 ## Companion pane
 
-After `opencode` is fully initialized, the plugin spawns a **separate Node + Ink TUI** in a sibling terminal region:
+After `opencode` is fully initialized, the plugin spawns a **separate Node + Ink TUI** in a new tab (or, if you're already inside tmux, a split pane):
 
 1. **tmux split** — if `$TMUX` is set and `tmux` is on `$PATH`, the current tmux pane splits horizontally.
-2. **iTerm2 split** — on macOS when the parent terminal is iTerm2, the current session splits vertically via AppleScript.
-3. **Detached terminal window** — opens a new window in Terminal.app, Windows Terminal, `gnome-terminal`, `konsole`, `xfce4-terminal`, `kitty`, `wezterm`, `alacritty`, or `ghostty`.
-4. **Manual fallback** — on any other terminal, the plugin emits a toast with the command to run:
+2. **tmux detached** — if `tmux` is on `$PATH` but `$TMUX` is not set (you're not in a tmux session), a fresh detached tmux session named `multiplayer-companion` is created. Attach to it later with `tmux attach -t multiplayer-companion`. Override the session name with `MP_COMPANION_TMUX_SESSION=mysession`.
+3. **iTerm2 tab** — on macOS when the parent terminal is iTerm2, a new tab is opened in the current iTerm2 window via AppleScript.
+4. **Detached terminal tab** — on Windows Terminal, a new tab is opened via `wt new-tab`. On Linux, a new tab is opened in `gnome-terminal` / `konsole` / `wezterm`. On macOS (Terminal.app), a new window is opened.
+5. **Manual fallback** — on any other terminal, the plugin emits a toast with the command to run:
 
    ```bash
    npx @hmanlab/multiplayer-watch
