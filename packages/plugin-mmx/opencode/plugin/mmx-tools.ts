@@ -266,12 +266,12 @@ export default async () => {
           "Show current Token Plan usage and remaining quota (5-hour rolling and weekly windows). Use when the user asks about quota, usage, limits, or how many calls they have left.",
         args: {},
         async execute(_args, ctx) {
-          const proc = await $`mmx quota show --output json --non-interactive`.nothrow()
+          const proc = await ctx.$`mmx quota`.nothrow()
           if (proc.exitCode === 0) {
             const out = proc.stdout.toString().trim()
             if (out) return out
           }
-          const fallback = await $`mmx quota show --non-interactive`.nothrow()
+          const fallback = await ctx.$`mmx quota show --non-interactive`.nothrow()
           return fallback.stdout.toString().trim() || fallback.stderr.toString().trim() || "(no quota info)"
         },
       }),
