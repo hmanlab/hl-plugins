@@ -71,7 +71,8 @@ async function reportOne(plugin: PluginManifest): Promise<void> {
   const configOk = pluginInCfg && permInCfg
   const configDetail = configOk
     ? `plugin[] + ${plugin.contract.permission ?? "(no perm)"}`
-    : [pluginInCfg ? null : "plugin[]", permInCfg ? null : "permission"].filter(Boolean).join(" + ") + " missing"
+    : [pluginInCfg ? null : "plugin[]", permInCfg ? null : "permission"].filter(Boolean).join(" + ") +
+      " missing"
   ui.info(row("Config merged:", configDetail, configOk))
 
   // Requirements

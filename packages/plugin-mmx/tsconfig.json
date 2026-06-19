@@ -1,8 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "types": ["bun"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["opencode/plugin/**", "opencode/skill/**"]
+  "include": ["opencode/plugin/**/*.ts"],
+  "exclude": ["opencode/skill/**"]
 }

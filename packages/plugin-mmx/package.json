@@ -20,7 +20,15 @@
     ],
     "auth": {
       "check": "mmx auth status",
-      "login": { "cmd": "mmx auth login", "args": ["--api-key", { "var": "key" }] },
+      "login": {
+        "cmd": "mmx auth login",
+        "args": [
+          "--api-key",
+          {
+            "var": "key"
+          }
+        ]
+      },
       "verify": "mmx quota",
       "keyLabel": "MiniMax API key",
       "envVar": "MMX_API_KEY"

@@ -43,9 +43,7 @@ function resolveFilePath(
 ): { filePath: string; wasSuspicious: boolean; originalArg: string | undefined } {
   const envDir = process.env.MMX_OUTPUT_DIR ?? DEFAULT_OUT_DIR
   const requested = argsOutPath ?? join(envDir, defaultFileName)
-  const requestedDirAbs = isAbsolute(requested)
-    ? dirname(requested)
-    : resolve(worktree, dirname(requested))
+  const requestedDirAbs = isAbsolute(requested) ? dirname(requested) : resolve(worktree, dirname(requested))
   if (isSuspiciousOutDir(requestedDirAbs)) {
     return {
       filePath: join(DEFAULT_OUT_DIR, basename(requested)),
@@ -93,14 +91,8 @@ export default async () => {
             .string()
             .optional()
             .describe("Aspect ratio. One of: 1:1, 16:9, 9:16, 4:3, 3:4, 21:9. Default 1:1."),
-          n: tool.schema
-            .number()
-            .optional()
-            .describe("Number of images to generate. Default 1, max 4."),
-          seed: tool.schema
-            .number()
-            .optional()
-            .describe("Random seed for reproducible generation."),
+          n: tool.schema.number().optional().describe("Number of images to generate. Default 1, max 4."),
+          seed: tool.schema.number().optional().describe("Random seed for reproducible generation."),
           out_dir: tool.schema
             .string()
             .optional()
@@ -114,7 +106,9 @@ export default async () => {
           filename_prefix: tool.schema
             .string()
             .optional()
-            .describe("Filename prefix. Defaults to a unique per-call value (image-<timestamp>) so back-to-back calls don't overwrite each other. Pass an explicit value for predictable sequential naming."),
+            .describe(
+              "Filename prefix. Defaults to a unique per-call value (image-<timestamp>) so back-to-back calls don't overwrite each other. Pass an explicit value for predictable sequential naming.",
+            ),
         },
         async execute(args, ctx) {
           const requestedDir = resolveOutDir(args.out_dir, ctx.worktree)
@@ -146,28 +140,22 @@ export default async () => {
         description:
           "Synthesize speech from text using MiniMax's speech-2.8-hd model. Use when the user wants a voiceover, narration, audio file, TTS, or to read text aloud. Saves an MP3 and returns the path. 40+ languages. Default voice: English_expressive_narrator.",
         args: {
-          text: tool.schema
-            .string()
-            .describe("The text to speak. Up to 10,000 characters."),
-          voice: tool.schema
-            .string()
-            .optional()
-            .describe("Voice ID. Default English_expressive_narrator."),
-          speed: tool.schema
-            .number()
-            .optional()
-            .describe("Speech speed multiplier. Default 1.0."),
+          text: tool.schema.string().describe("The text to speak. Up to 10,000 characters."),
+          voice: tool.schema.string().optional().describe("Voice ID. Default English_expressive_narrator."),
+          speed: tool.schema.number().optional().describe("Speech speed multiplier. Default 1.0."),
           out_path: tool.schema
             .string()
             .optional()
-            .describe("Override output .mp3 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/speech-<timestamp>.mp3 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning."),
+            .describe(
+              "Override output .mp3 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/speech-<timestamp>.mp3 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning.",
+            ),
         },
         async execute(args, ctx) {
-          const { filePath: outPath, wasSuspicious, originalArg } = resolveFilePath(
-            args.out_path,
-            ctx.worktree,
-            `speech-${Date.now()}.mp3`,
-          )
+          const {
+            filePath: outPath,
+            wasSuspicious,
+            originalArg,
+          } = resolveFilePath(args.out_path, ctx.worktree, `speech-${Date.now()}.mp3`)
           ensureDir(dirname(outPath))
           const cliArgs = ["speech", "synthesize", "--text", args.text]
           if (args.voice) cliArgs.push("--voice", args.voice)
@@ -198,18 +186,22 @@ export default async () => {
           model: tool.schema
             .string()
             .optional()
-            .describe("Model ID. Default MiniMax-Hailuo-2.3. Use MiniMax-Hailuo-2.3-Fast for quicker lower-quality results."),
+            .describe(
+              "Model ID. Default MiniMax-Hailuo-2.3. Use MiniMax-Hailuo-2.3-Fast for quicker lower-quality results.",
+            ),
           out_path: tool.schema
             .string()
             .optional()
-            .describe("Override output .mp4 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/video-<timestamp>.mp4 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning."),
+            .describe(
+              "Override output .mp4 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/video-<timestamp>.mp4 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning.",
+            ),
         },
         async execute(args, ctx) {
-          const { filePath: outPath, wasSuspicious, originalArg } = resolveFilePath(
-            args.out_path,
-            ctx.worktree,
-            `video-${Date.now()}.mp4`,
-          )
+          const {
+            filePath: outPath,
+            wasSuspicious,
+            originalArg,
+          } = resolveFilePath(args.out_path, ctx.worktree, `video-${Date.now()}.mp4`)
           ensureDir(dirname(outPath))
           const cliArgs = ["video", "generate", "--prompt", args.prompt]
           if (args.model) cliArgs.push("--model", args.model)
@@ -235,7 +227,9 @@ export default async () => {
         args: {
           prompt: tool.schema
             .string()
-            .describe("Style description: genre, mood, instruments, tempo. E.g. 'cinematic orchestral, building tension'."),
+            .describe(
+              "Style description: genre, mood, instruments, tempo. E.g. 'cinematic orchestral, building tension'.",
+            ),
           lyrics: tool.schema
             .string()
             .optional()
@@ -244,22 +238,21 @@ export default async () => {
             .boolean()
             .optional()
             .describe("If true, generate instrumental music with no vocals."),
-          vocals: tool.schema
-            .string()
-            .optional()
-            .describe("Vocal style hint, e.g. 'warm male baritone'."),
+          vocals: tool.schema.string().optional().describe("Vocal style hint, e.g. 'warm male baritone'."),
           bpm: tool.schema.number().optional().describe("Exact tempo in BPM."),
           out_path: tool.schema
             .string()
             .optional()
-            .describe("Override output .mp3 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/music-<timestamp>.mp3 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning."),
+            .describe(
+              "Override output .mp3 path. Leave unset unless the user explicitly asked for a different save location in this conversation. Default: ~/Desktop/mmx-output/music-<timestamp>.mp3 (or $MMX_OUTPUT_DIR if set). Suspicious parent directories fall back to the default with a warning.",
+            ),
         },
         async execute(args, ctx) {
-          const { filePath: outPath, wasSuspicious, originalArg } = resolveFilePath(
-            args.out_path,
-            ctx.worktree,
-            `music-${Date.now()}.mp3`,
-          )
+          const {
+            filePath: outPath,
+            wasSuspicious,
+            originalArg,
+          } = resolveFilePath(args.out_path, ctx.worktree, `music-${Date.now()}.mp3`)
           ensureDir(dirname(outPath))
           const cliArgs = ["music", "generate", "--prompt", args.prompt]
           if (args.lyrics) cliArgs.push("--lyrics", args.lyrics)
@@ -312,9 +305,7 @@ export default async () => {
         description:
           "Describe or analyze an image using MiniMax's vision model. Pass a local file path or URL. Returns a textual description. Useful when the user uploads an image and wants analysis, OCR, or a description.",
         args: {
-          image: tool.schema
-            .string()
-            .describe("Local file path or URL of the image."),
+          image: tool.schema.string().describe("Local file path or URL of the image."),
           prompt: tool.schema
             .string()
             .optional()

@@ -141,9 +141,7 @@ function discoverInNodeModules(): PluginManifest[] {
  */
 export function discoverPlugins(): PluginManifest[] {
   const monorepo = discoverInMonorepo()
-  const installed = discoverInNodeModules().filter(
-    (p) => !monorepo.some((m) => m.name === p.name),
-  )
+  const installed = discoverInNodeModules().filter((p) => !monorepo.some((m) => m.name === p.name))
   return [...monorepo, ...installed].sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -153,14 +151,11 @@ export function getPlugin(name: string): PluginManifest {
   const match = all.find((p) => p.name === name)
   if (!match) {
     const known = all.map((p) => p.name).join(", ")
-    const hint = match === null && !known
-      ? `\nIf you're using the published CLI, run \`npm install -g @hl-plugins/${name}\` first.`
-      : ""
-    throw new Error(
-      `Unknown plugin: "${name}".\n` +
-        `Known plugins: ${known || "(none discovered)"}.` +
-        hint,
-    )
+    const hint =
+      match === null && !known
+        ? `\nIf you're using the published CLI, run \`npm install -g @hl-plugins/${name}\` first.`
+        : ""
+    throw new Error(`Unknown plugin: "${name}".\n` + `Known plugins: ${known || "(none discovered)"}.` + hint)
   }
   return match
 }

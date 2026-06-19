@@ -17,9 +17,30 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      - run: npm run format:check
       - run: npm run typecheck
       - run: npm run build
       - name: Smoke test built CLI
         run: |
           node packages/cli/dist/index.js help
           node packages/cli/dist/index.js list
+
+  multiplayer-tests:
+    name: Multiplayer plugin tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: npm ci
+      - name: Typecheck plugin
+        run: npx tsc -p packages/plugin-multiplayer/tsconfig.json --noEmit
+      - name: Unit tests
+        run: bun test packages/plugin-multiplayer/test/unit/
+      - name: Smoke tests
+        run: bun run packages/plugin-multiplayer/test/smoke.ts
