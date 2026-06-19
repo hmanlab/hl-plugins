@@ -56,6 +56,7 @@ MP_PORT=7332 MP_HOST=192.168.1.42 opencode
 | `mp_status` | any | Role, port, code, peers list, host handle, leaving-state info |
 | `mp_rejoin <code>` | any → guest | Rejoin with a grace code (valid 1 hour after the host change) |
 | `mp_chat <text>` | host or guest | Send a chat message to all peers. Same as typing in the companion pane's input box. |
+| `mp_watch` | any | Launch the companion TUI pane in a sibling terminal (presence, chat, input box). |
 
 `mp_history` (recent host transfers) is deferred to Phase 07 — the data is already persisted in `state.json`.
 
@@ -115,6 +116,7 @@ OpenCode does not have a built-in `/mp` slash command yet. The user types intent
 | "what's the invite code?" | `mp_code` |
 | "what's the multiplayer status?" | `mp_status` |
 | "rejoin `mp-...`" / "come back as guest" | `mp_rejoin(code=...)` |
+| "open the companion" / "show the watch pane" / "launch companion" | `mp_watch` |
 
 ## Host handoff flow
 

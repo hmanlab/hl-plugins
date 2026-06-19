@@ -263,6 +263,47 @@ export async function createMultiplayerPlugin(input: PluginInput) {
           return plugin.mpRejoin(args.code)
         },
       }),
+
+      mp_watch: tool({
+        description:
+          "Launch the companion TUI pane in a sibling terminal (presence, chat, input box). Auto-detects tmux/iTerm2/detached terminal; falls back to npx auto-install.",
+        args: {},
+        async execute() {
+          const server = await plugin.startCompanionServer()
+          if (!server) {
+            return "Companion server failed to start. Check OpenCode logs."
+          }
+          const strategy = detectStrategy({
+            env: {
+              TMUX: process.env["TMUX"],
+              TERM_PROGRAM: process.env["TERM_PROGRAM"],
+              ITERM_SESSION_ID: process.env["ITERM_SESSION_ID"],
+              TERMINAL: process.env["TERMINAL"],
+              PATH: process.env["PATH"],
+              MP_NO_COMPANION: process.env["MP_NO_COMPANION"],
+            },
+          })
+          if (strategy === "manual") {
+            const cmd = manualCommand({
+              binPath: companionBinPath(),
+              socketPath: companionSocketPath(),
+              token: server.getToken(),
+            })
+            return `Run this in another terminal to open the companion:\n${cmd}\n\nOr install globally: npm install -g @hmanlab/multiplayer-watch`
+          }
+          const result = spawnStrategy({
+            strategy,
+            binPath: companionBinPath(),
+            socketPath: companionSocketPath(),
+            token: server.getToken(),
+            cwd: process.cwd(),
+          })
+          if (!result.ok) {
+            return `Spawn failed (${result.strategy}: ${result.reason}). Run:\n${result.command}`
+          }
+          return `Companion launched via ${result.strategy}.`
+        },
+      }),
     },
   }
 }
