@@ -28,7 +28,7 @@ jobs:
       - name: Bump version to match tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          npm --workspace packages/cli version "$VERSION" --no-git-tag-version
+          npm --workspace packages/cli version "$VERSION" --no-git-tag-version --allow-same-version
       - name: Publish
         run: npm run publish:cli
         env:
