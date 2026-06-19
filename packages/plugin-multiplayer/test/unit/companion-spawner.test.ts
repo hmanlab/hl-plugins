@@ -126,6 +126,129 @@ describe("spawnStrategy: tmux-detached", () => {
 })
 
 // ---------------------------------------------------------------------------
+// Regression: command string must be runnable. v0.3.4 produced
+// `node 'npx -y @hmanlab/multiplayer-watch'` which silently failed.
+// v0.3.5 runs `binPath` directly.
+// ---------------------------------------------------------------------------
+
+describe("spawnStrategy: command is runnable (no 'node npx' bug)", () => {
+  const npxBinPath = "npx -y @hmanlab/multiplayer-watch"
+
+  it("tmux-detached produces a runnable npx command", () => {
+    const r = spawnStrategy({ ...baseInputs, strategy: "tmux-detached", binPath: npxBinPath })
+    expect(r.command).toContain("npx -y @hmanlab/multiplayer-watch")
+    expect(r.command).not.toMatch(/node\s+'npx/)
+    expect(r.command).not.toMatch(/node\s+"npx/)
+  })
+
+  it("tmux produces a runnable npx command", () => {
+    const r = spawnStrategy({ ...baseInputs, strategy: "tmux", binPath: npxBinPath })
+    expect(r.command).toContain("npx -y @hmanlab/multiplayer-watch")
+    expect(r.command).not.toMatch(/node\s+'npx/)
+  })
+
+  it("iterm2 produces a runnable npx command", () => {
+    const r = spawnStrategy({ ...baseInputs, strategy: "iterm2", binPath: npxBinPath })
+    expect(r.command).toContain("npx -y @hmanlab/multiplayer-watch")
+    expect(r.command).not.toMatch(/node\s+'npx/)
+  })
+
+  it("detached (Linux/Mac) produces a runnable npx command", () => {
+    const r = spawnStrategy({ ...baseInputs, strategy: "detached", binPath: npxBinPath })
+    expect(r.command).toContain("npx -y @hmanlab/multiplayer-watch")
+    expect(r.command).not.toMatch(/node\s+'npx/)
+  })
+
+  it("manual fallback produces a runnable npx command", () => {
+    const r = spawnStrategy({ ...baseInputs, strategy: "manual", binPath: npxBinPath })
+    expect(r.command).toContain("npx -y @hmanlab/multiplayer-watch")
+    expect(r.command).not.toMatch(/node\s+'npx/)
+  })
+
+  it("buildCompanionCommand: produces env-prefixed runnable command, no `node` wrap", () => {
+    const r = spawnStrategy({ ...baseInputs, strategy: "manual", binPath: npxBinPath })
+    if (!r.ok) {
+      expect(r.command.startsWith("MP_COMPANION_SOCK=")).toBe(true)
+      expect(r.command).toContain("MP_COMPANION_TOKEN='abc123'")
+      // The very last token should be the npx command, with no `node` prefix.
+      expect(r.command.endsWith("npx -y @hmanlab/multiplayer-watch")).toBe(true)
+    }
+  })
+
+  it("manualCommand: produces env-prefixed runnable command, no `node` wrap", () => {
+    const cmd = manualCommand({ ...baseInputs, binPath: npxBinPath })
+    expect(cmd).toContain("MP_COMPANION_SOCK='/tmp/companion.sock'")
+    expect(cmd).toContain("MP_COMPANION_TOKEN='abc123'")
+    expect(cmd.endsWith("npx -y @hmanlab/multiplayer-watch")).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// npx availability check
+// ---------------------------------------------------------------------------
+
+describe("spawnStrategy: npx availability check", () => {
+  const npxBinPath = "npx -y @hmanlab/multiplayer-watch"
+
+  it("returns ok:false with reason 'npx_not_found' when binPath is npx and npx is missing", () => {
+    // Save and clear PATH so defaultHasBinary finds no npx.
+    const savedPath = process.env["PATH"]
+    process.env["PATH"] = ""
+    try {
+      const r = spawnStrategy({ ...baseInputs, strategy: "tmux-detached", binPath: npxBinPath })
+      expect(r.ok).toBe(false)
+      if (!r.ok) {
+        expect(r.reason).toBe("npx_not_found")
+        expect(r.command).toContain("npx -y @hmanlab/multiplayer-watch")
+      }
+    } finally {
+      process.env["PATH"] = savedPath
+    }
+  })
+
+  it("returns ok (or fails for another reason) when binPath is npx and npx is on PATH", () => {
+    const savedPath = process.env["PATH"]
+    try {
+      // Stub a fake npx at a temp dir so defaultHasBinary finds it.
+      const fs = require("node:fs")
+      const dir = "/tmp/npx-stub-for-test"
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(`${dir}/npx`, "#!/bin/sh\nexit 0\n")
+      fs.chmodSync(`${dir}/npx`, 0o755)
+      process.env["PATH"] = `${dir}:/usr/bin:/bin`
+      // Use the `manual` strategy so we don't actually exec any terminal binary.
+      const r = spawnStrategy({ ...baseInputs, strategy: "manual", binPath: npxBinPath })
+      // It will be ok:false because manual returns ok:false by design, but
+      // the reason MUST be `manual_fallback` — NOT `npx_not_found`.
+      if (!r.ok) {
+        expect(r.reason).toBe("manual_fallback")
+      }
+      fs.rmSync(dir, { recursive: true, force: true })
+    } finally {
+      process.env["PATH"] = savedPath
+    }
+  })
+
+  it("does NOT trigger npx check when binPath is a file path", () => {
+    const savedPath = process.env["PATH"]
+    process.env["PATH"] = ""
+    try {
+      const r = spawnStrategy({
+        ...baseInputs,
+        strategy: "manual",
+        binPath: "/usr/local/bin/multiplayer-watch",
+      })
+      expect(r.ok).toBe(false)
+      if (!r.ok) {
+        expect(r.reason).toBe("manual_fallback")
+      }
+    } finally {
+      process.env["PATH"] = savedPath
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
 // manualCommand
 // ---------------------------------------------------------------------------
 
@@ -137,9 +260,12 @@ describe("manualCommand", () => {
     expect(cmd).toContain(baseInputs.binPath)
   })
 
-  it("escapes single quotes in the bin path", () => {
+  it("does NOT auto-escape single quotes in the bin path (binPath is a runnable command line)", () => {
+    // v0.3.5: `binPath` is treated as a runnable command line, so single
+    // quotes are passed through verbatim. Users with quoted paths are
+    // expected to escape them themselves when setting `MP_COMPANION_BIN`.
     const cmd = manualCommand({ ...baseInputs, binPath: "/tmp/it's/weird.js" })
-    expect(cmd).toContain("/tmp/it'\\''s/weird.js")
+    expect(cmd).toContain("/tmp/it's/weird.js")
   })
 })
 

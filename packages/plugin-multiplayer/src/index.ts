@@ -236,6 +236,9 @@ export async function createMultiplayerPlugin(input: PluginInput) {
             cwd: process.cwd(),
           })
           if (!result.ok) {
+            if (result.reason === "npx_not_found") {
+              return `npx is not on PATH. Install Node.js (which ships with npx) or run \`npm install -g @hmanlab/multiplayer-watch\` and try again.`
+            }
             return `Spawn failed (${result.strategy}: ${result.reason}). Run:\n${result.command}`
           }
           return `Companion launched via ${result.strategy}.`

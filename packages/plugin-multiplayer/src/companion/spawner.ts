@@ -101,11 +101,36 @@ function quote(s: string): string {
 
 function buildCompanionCommand(inputs: SpawnInputs): string {
   const envPrefix = `MP_COMPANION_SOCK=${quote(inputs.socketPath)} MP_COMPANION_TOKEN=${quote(inputs.token)}`
-  const exec = inputs.env?.["MP_COMPANION_EXEC"] ?? "node"
-  return `${envPrefix} ${exec} ${quote(inputs.binPath)}`
+  // `binPath` is a runnable command line (e.g. `npx -y @hmanlab/multiplayer-watch`
+  // or `node /path/to/script.js`). Do NOT prepend `node` — that produced
+  // `node 'npx -y ...'` which silently failed in v0.3.4.
+  return `${envPrefix} ${inputs.binPath}`
+}
+
+/**
+ * Check whether `binPath` starts with `npx` (with or without `-y`/`--yes`)
+ * and, if so, whether `npx` is on PATH. Returns null when no check is
+ * needed, or a `SpawnResult` to short-circuit when `npx` is missing.
+ */
+function checkNpxAvailable(inputs: SpawnInputs): SpawnResult | null {
+  const trimmed = inputs.binPath.trimStart()
+  if (!trimmed.startsWith("npx")) return null
+  // Extract the first token ("npx") — handle `npx`, `npx -y`, `npx --yes`.
+  const firstToken = trimmed.split(/\s+/)[0]
+  if (firstToken !== "npx") return null
+  const hasBin = defaultHasBinary
+  if (hasBin("npx")) return null
+  return {
+    ok: false,
+    strategy: inputs.strategy,
+    reason: "npx_not_found",
+    command: buildCompanionCommand(inputs),
+  }
 }
 
 export function spawnStrategy(inputs: SpawnInputs): SpawnResult {
+  const missing = checkNpxAvailable(inputs)
+  if (missing) return missing
   switch (inputs.strategy) {
     case "tmux":
       return spawnTmux(inputs)
@@ -277,7 +302,9 @@ function spawnDetached(inputs: SpawnInputs): SpawnResult {
 }
 
 export function manualCommand(inputs: Pick<SpawnInputs, "binPath" | "socketPath" | "token">): string {
-  return `MP_COMPANION_SOCK=${quote(inputs.socketPath)} MP_COMPANION_TOKEN=${quote(inputs.token)} node ${quote(inputs.binPath)}`
+  // `binPath` is a runnable command line (e.g. `npx -y @hmanlab/multiplayer-watch`).
+  // No implicit `node` prefix — that produced the v0.3.4 silent-fail bug.
+  return `MP_COMPANION_SOCK=${quote(inputs.socketPath)} MP_COMPANION_TOKEN=${quote(inputs.token)} ${inputs.binPath}`
 }
 
 export function isInTmux(env: SpawnerEnv): boolean {

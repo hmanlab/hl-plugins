@@ -74,7 +74,7 @@ The companion is launched explicitly by the user via `mp_watch`. It opens as a n
    npx -y @hmanlab/multiplayer-watch
    ```
 
-   The `npx` command auto-installs the companion and connects to the plugin's Unix-domain socket.
+   The `npx` command auto-installs the companion package on first run and connects to the plugin's Unix-domain socket. Subsequent runs use the npm cache (fast). If `npx` itself is not on `PATH`, `mp_watch` returns a clear error telling you to install Node.js (which ships with npx) or run `npm install -g @hmanlab/multiplayer-watch`.
 
 The companion shows: presence list (left), chat history (right, scrollable), input box (bottom). The companion is opt-in — it only opens when the user runs `mp_watch`.
 
