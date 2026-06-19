@@ -99,6 +99,8 @@ import {
 import { Toaster, Logger } from "../../src/bridge/index.ts"
 import { StateStore, readHandleFileSync, writeHandleFile } from "../../src/persistence/index.ts"
 import { startHostServer } from "../../src/server/index.ts"
+import { HostRole } from "../../src/role/index.ts"
+import { peerListForBroadcast } from "../../src/role/peer-helpers.ts"
 
 // ── Module state ──────────────────────────────────────────────────────────
 
@@ -166,20 +168,10 @@ function toLogFn(l: Logger): LogFn {
 
 // ── Peer helpers ──────────────────────────────────────────────────────────
 
-function peerListForBroadcast(): { handle: string; joinedAt: number }[] {
-  const out: { handle: string; joinedAt: number }[] = []
-  for (const p of hostPeers.values()) {
-    if (p.handle === "__pending__") continue
-    out.push({ handle: p.handle, joinedAt: p.joinedAt })
-  }
-  out.sort((a, b) => a.joinedAt - b.joinedAt)
-  return out
-}
-
 function takenHandles(): string[] {
   const out: string[] = []
   if (hostHandle) out.push(hostHandle)
-  for (const p of hostPeers.values()) {
+  for (const p of (hostRole?.getPeers() ?? hostPeers).values()) {
     if (p.handle !== "__pending__") out.push(p.handle)
   }
   return out
@@ -208,20 +200,23 @@ function sendToPeer(
 }
 
 function broadcast(msg: WireMessage, except?: { send(data: string): unknown }): void {
-  for (const ws of hostPeers.keys()) {
-    if (except && ws === except) continue
-    sendToPeer(ws, msg)
+  if (hostRole) {
+    hostRole.broadcast(msg, except as Bun.ServerWebSocket<HostSocketData>)
   }
 }
 
 function broadcastPeersUpdate(): void {
-  broadcast({ type: "peers_update", peers: peerListForBroadcast() })
+  if (hostRole) {
+    const peers = peerListForBroadcast(hostRole.getPeers())
+    hostRole.broadcast({ type: "peers_update", peers })
+  }
 }
 
 function findPeerWs(
   handle: string,
 ): Bun.ServerWebSocket<HostSocketData> | null {
-  for (const [ws, peer] of hostPeers.entries()) {
+  const peers = hostRole?.getPeers() ?? hostPeers
+  for (const [ws, peer] of peers.entries()) {
     if (peer.handle === handle) return ws
   }
   return null
@@ -267,51 +262,34 @@ function cleanup(): void {
 
 // ── Host role ─────────────────────────────────────────────────────────────
 
+let hostRole: HostRole | null = null
+
 async function startHost(
   handle: string,
   bindPort: number,
   bindHost: string,
-  toast: ToastFn,
-  log: LogFn,
+  toaster: Toaster,
+  logger: Logger,
 ): Promise<{ ok: true; code: string; url: string } | { ok: false; reason: string }> {
   if (role !== "idle") {
     return { ok: false, reason: `not_idle (currently ${role})` }
   }
 
-  hostHandle = handle
-  hostCode = mintCode(handle)
-  const code = hostCode
-  const url = `ws://${bindHost}:${bindPort}`
+  const hr = new HostRole({ port: bindPort, host: bindHost, handle, state: store, toaster, logger })
+  const result = await hr.start()
 
-  const serverResult = await startHostServer({
-    port: bindPort,
-    host: bindHost,
-    handlers: {
-      onMessage(ws, raw) { void handleHostMessage(ws, raw, toast, log) },
-      onClose(ws) { void handleHostClose(ws, toast, log) },
-    },
-  })
-
-  if (!serverResult.ok) {
-    hostCode = null
-    hostHandle = null
-    if (serverResult.reason.startsWith("port_")) {
-      await log("warn", "host start failed: port in use", { port: bindPort })
-    } else {
-      await log("error", "host start failed", { error: serverResult.reason })
-    }
-    return { ok: false, reason: serverResult.reason }
+  if (!result.ok) {
+    return result
   }
 
-  hostServer = serverResult.server
+  hostRole = hr
+  hostServer = null
+  hostCode = result.code
+  hostHandle = handle
   role = "host"
   port = bindPort
   hostAddr = `${bindHost}:${bindPort}`
-  await store.recordHostStarted(handle, code)
-  await log("info", "host started", { handle, port: bindPort, code, url })
-  await toast(`invite: ${code}`, "success", "multiplayer")
-  await toast(`hosting on ${url}`, "info", "multiplayer")
-  return { ok: true, code, url }
+  return result
 }
 
 async function handleHostMessage(
@@ -389,7 +367,7 @@ async function handleHostMessage(
     sendToPeer(ws, {
       type: "welcome",
       handle: hostHandle ?? "host",
-      peers: peerListForBroadcast(),
+      peers: peerListForBroadcast(hostRole?.getPeers() ?? hostPeers),
     })
     return
   }
@@ -509,7 +487,7 @@ async function startLeave(
   if (role !== "host") return
   if (pendingLeave !== "none") return
 
-  const snapshot = peerListForBroadcast()
+  const snapshot = peerListForBroadcast(hostRole?.getPeers() ?? hostPeers)
   if (snapshot.length === 0) {
     await log("info", "host leaving with no peers; ending session")
     stopHost(toast, log)
@@ -1005,7 +983,7 @@ export default async (input: PluginInput) => {
           "Start a multiplayer host: bind the local port (MP_PORT env var, default 7332) on MP_HOST (default localhost), mint an invite code, and return the URL. Other peers join with `mp_join <code>`. Fails with a clear reason if the port is busy. Only works when this plugin instance is in idle role.",
         args: {},
         async execute() {
-          const result = await startHost(handle, envPort, envHost, toast, log)
+          const result = await startHost(handle, envPort, envHost, toaster, logger)
           if (result.ok) {
             return `Hosting on ${result.url}\nInvite code: ${result.code}\nShare the code with your peer. They run: mp_join ${result.code}\n(mp_status shows the current peers and leaving state.)`
           }
@@ -1109,15 +1087,16 @@ export default async (input: PluginInput) => {
             lines.push(`role: host`)
             lines.push(`port: ${port}`)
             lines.push(`url: ws://${hostAddr}`)
-            lines.push(`invite: ${hostCode ?? "(none)"}`)
-            lines.push(`handle: ${hostHandle ?? "(none)"}`)
-            const peers = peerListForBroadcast()
+            lines.push(`invite: ${hostRole?.getCode() ?? hostCode ?? "(none)"}`)
+            lines.push(`handle: ${hostRole?.getHandle() ?? hostHandle ?? "(none)"}`)
+            const peersMap = hostRole?.getPeers() ?? hostPeers
+            const peers = peerListForBroadcast(peersMap)
             if (peers.length === 0) {
               lines.push(`peers: (none)`)
             } else {
               lines.push(`peers (${peers.length}):`)
               for (const p of peers) {
-                const v = volunteers.has(p.handle) ? " [volunteer]" : ""
+                const v = hostRole?.isVolunteer(p.handle) ? " [volunteer]" : ""
                 lines.push(`  - ${p.handle} (joined ${Math.round((Date.now() - p.joinedAt) / 1000)}s ago)${v}`)
               }
             }
