@@ -1,8 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["opencode/plugin/**/*.ts"],
+  "include": ["opencode/plugin/**/*.ts", "src/**/*.ts"],
   "exclude": ["opencode/skill/**"]
 }
