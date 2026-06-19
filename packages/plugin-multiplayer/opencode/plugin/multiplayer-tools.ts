@@ -99,7 +99,7 @@ import {
 import { Toaster, Logger } from "../../src/bridge/index.ts"
 import { StateStore, readHandleFileSync, writeHandleFile } from "../../src/persistence/index.ts"
 import { startHostServer } from "../../src/server/index.ts"
-import { HostRole } from "../../src/role/index.ts"
+import { HostRole, GuestRole } from "../../src/role/index.ts"
 import { peerListForBroadcast } from "../../src/role/peer-helpers.ts"
 
 // ── Module state ──────────────────────────────────────────────────────────
@@ -251,6 +251,9 @@ function cleanup(): void {
   } catch {
     // ignore
   }
+  guestRole?.leave()
+  guestRole = null
+  guestWs = null
   guestWs = null
   guestHostHandle = null
   guestMyHandle = null
@@ -263,6 +266,7 @@ function cleanup(): void {
 // ── Host role ─────────────────────────────────────────────────────────────
 
 let hostRole: HostRole | null = null
+let guestRole: GuestRole | null = null
 
 async function startHost(
   handle: string,
@@ -923,27 +927,6 @@ async function becomeSuccessorHost(
   void oldHostUrl
 }
 
-function guestLeave(toast: ToastFn, log: LogFn): void {
-  if (guestWs) {
-    try {
-      guestWs.send(JSON.stringify({ type: "bye" }))
-    } catch {
-      // ignore
-    }
-    try {
-      guestWs.close()
-    } catch {
-      // ignore
-    }
-    guestWs = null
-    guestHostHandle = null
-    guestMyHandle = null
-    guestHostUrl = null
-    void toast("left the session", "info", "multiplayer")
-    void log("info", "guest left")
-  }
-}
-
 // ── Plugin entry ──────────────────────────────────────────────────────────
 
 export default async (input: PluginInput) => {
@@ -1012,13 +995,16 @@ export default async (input: PluginInput) => {
           if (!isValidCode(args.code)) {
             return "Invalid code format. Expected `mp-<handle>-XXXX-XXXX`."
           }
-          const wsUrl = `ws://${envHost}:${envPort}`
-          const result = await dialHost(wsUrl, args.code, handle, toast, log, "join")
+          const gr = new GuestRole({ port: envPort, host: envHost, handle, state: store, toaster, logger })
+          const result = await gr.dial(args.code, "join")
           if (result.ok) {
+            guestRole = gr
+            guestWs = gr.getWs()
+            role = "guest"
             return `Connected to ${result.hostHandle}. You are ${result.myHandle} in the session.`
           }
           if (result.reason === "timeout") {
-            return `No host responded at ${wsUrl}. Is the host's opencode running, and are both using the same MP_HOST/MP_PORT?`
+            return `No host responded at ws://${envHost}:${envPort}. Is the host's opencode running, and are both using the same MP_HOST/MP_PORT?`
           }
           return `Join failed: ${result.reason}`
         },
@@ -1034,7 +1020,8 @@ export default async (input: PluginInput) => {
             return `Leaving in ${GRACE_S}s — auto-transfer pending. Use mp_cancel_leave to abort, or mp_volunteer (as a guest) to opt in as next host.`
           }
           if (role === "guest") {
-            guestLeave(toast, log)
+            guestRole?.leave()
+            guestRole = null
             role = "idle"
             return "Left the session."
           }
@@ -1060,8 +1047,8 @@ export default async (input: PluginInput) => {
         args: {},
         async execute() {
           if (role !== "guest") return "Only guests can volunteer."
-          if (!guestWs || guestWs.readyState !== WebSocket.OPEN) return "Not connected."
-          guestWs.send(JSON.stringify({ type: "volunteer" }))
+          if (!guestRole?.isConnected()) return "Not connected."
+          guestRole.sendVolunteer()
           return "Volunteered as next host candidate."
         },
       }),
@@ -1072,7 +1059,7 @@ export default async (input: PluginInput) => {
         args: {},
         async execute() {
           if (role === "host") return hostCode ?? "(no code)"
-          if (role === "guest") return guestHostHandle ? `host handle: ${guestHostHandle}` : "(unknown)"
+          if (role === "guest") return guestRole?.getHostHandle() ? `host handle: ${guestRole.getHostHandle()}` : "(unknown)"
           return "Not in a session. Use mp_host or mp_join first."
         },
       }),
@@ -1106,14 +1093,14 @@ export default async (input: PluginInput) => {
             return lines.join("\n")
           }
           if (role === "guest") {
-            const connected = guestWs?.readyState === WebSocket.OPEN ? "yes" : "no"
+            const connected = guestRole?.isConnected() ? "yes" : "no"
             return [
               `role: guest`,
               `connected: ${connected}`,
               `port: ${port}`,
-              `host: ${guestHostHandle ?? "(unknown)"}`,
-              `me: ${guestMyHandle ?? handle}`,
-              `host url: ${guestHostUrl ?? `ws://${hostAddr}`}`,
+              `host: ${guestRole?.getHostHandle() ?? "(unknown)"}`,
+              `me: ${guestRole?.getMyHandle() ?? handle}`,
+              `host url: ${guestRole?.getHostUrl() ?? `ws://${hostAddr}`}`,
             ].join("\n")
           }
           return `role: idle\nport: ${envPort}\nhost: ${envHost}\nhandle: ${handle}\nurl: ws://${hostAddr}`
@@ -1137,13 +1124,16 @@ export default async (input: PluginInput) => {
           if (!isValidCode(args.code)) {
             return "Invalid code format. Expected `mp-<handle>-XXXX-XXXX`."
           }
-          const wsUrl = `ws://${envHost}:${envPort}`
-          const result = await dialHost(wsUrl, args.code, handle, toast, log, "rejoin")
+          const gr = new GuestRole({ port: envPort, host: envHost, handle, state: store, toaster, logger })
+          const result = await gr.dial(args.code, "rejoin")
           if (result.ok) {
+            guestRole = gr
+            guestWs = gr.getWs()
+            role = "guest"
             return `Rejoined as guest (${result.myHandle}). Connected to ${result.hostHandle}.`
           }
           if (result.reason === "timeout") {
-            return `No host responded at ${wsUrl}. Is the host's opencode running? The grace code may have expired (>1 hour).`
+            return `No host responded at ws://${envHost}:${envPort}. Is the host's opencode running? The grace code may have expired (>1 hour).`
           }
           return `Rejoin failed: ${result.reason}`
         },
