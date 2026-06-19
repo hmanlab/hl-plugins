@@ -77,7 +77,6 @@ import {
 } from "../../src/constants.ts"
 import type {
   Role,
-  LeaveState,
   GraceCode,
   HistoryEntry,
   SessionState,
@@ -99,7 +98,7 @@ import {
 import { Toaster, Logger } from "../../src/bridge/index.ts"
 import { StateStore, readHandleFileSync, writeHandleFile } from "../../src/persistence/index.ts"
 import { startHostServer } from "../../src/server/index.ts"
-import { HostRole, GuestRole } from "../../src/role/index.ts"
+import { HostRole, GuestRole, TransferController } from "../../src/role/index.ts"
 import { peerListForBroadcast } from "../../src/role/peer-helpers.ts"
 
 // ── Module state ──────────────────────────────────────────────────────────
@@ -114,15 +113,8 @@ let hostCode: string | null = null
 let hostHandle: string | null = null
 let hostPeers: Map<Bun.ServerWebSocket<HostSocketData>, PeerInfo> = new Map()
 let volunteers: Set<string> = new Set()
-let pendingLeave: LeaveState = "none"
-let leaveTimer: ReturnType<typeof setTimeout> | null = null
-let transferTimer: ReturnType<typeof setTimeout> | null = null
-let successorQueue: { handle: string; code: string }[] = []
-let preLeaveSnapshot: {
-  code: string
-  handle: string
-  peers: { handle: string; joinedAt: number }[]
-} | null = null
+
+let tc: TransferController | null = null
 
 let guestWs: WebSocket | null = null
 let guestHostHandle: string | null = null
@@ -177,17 +169,6 @@ function takenHandles(): string[] {
   return out
 }
 
-function clearLeaveTimers(): void {
-  if (leaveTimer) {
-    clearTimeout(leaveTimer)
-    leaveTimer = null
-  }
-  if (transferTimer) {
-    clearTimeout(transferTimer)
-    transferTimer = null
-  }
-}
-
 function sendToPeer(
   ws: { send(data: string): unknown },
   msg: WireMessage,
@@ -223,10 +204,7 @@ function findPeerWs(
 }
 
 function cleanup(): void {
-  clearLeaveTimers()
-  pendingLeave = "none"
-  successorQueue = []
-  preLeaveSnapshot = null
+  tc?.reset()
   volunteers = new Set()
 
   try {
@@ -253,7 +231,6 @@ function cleanup(): void {
   }
   guestRole?.leave()
   guestRole = null
-  guestWs = null
   guestWs = null
   guestHostHandle = null
   guestMyHandle = null
@@ -412,16 +389,12 @@ async function handleHostMessage(
   }
 
   if (msg.type === "transfer_confirmed") {
-    if (pendingLeave === "transferring") {
-      await onTransferConfirmed(ws, msg.new_code, msg.new_url, toast, log)
-    }
+    await onTransferConfirmed(ws, msg.new_code, msg.new_url, toast, log)
     return
   }
 
   if (msg.type === "transfer_failed") {
-    if (pendingLeave === "transferring") {
-      await onTransferFailed(msg.reason, toast, log)
-    }
+    await onTransferFailed(msg.reason, toast, log)
     return
   }
 
@@ -449,208 +422,53 @@ async function handleHostClose(
   }
 }
 
-function stopHost(toast: ToastFn, log: LogFn): void {
-  if (hostServer) {
-    try {
-      hostServer.stop(true)
-    } catch {
-      // ignore
-    }
-    hostServer = null
-    hostCode = null
-    hostHandle = null
-    hostPeers = new Map()
-    void toast("session ended (host)", "info", "multiplayer")
-    void log("info", "host stopped")
-  }
-}
-
-// ── Transfer ──────────────────────────────────────────────────────────────
-
-function buildSuccessorQueue(): { handle: string; code: string }[] {
-  // Priority 1: any volunteer (longest-connected wins ties — by
-  // joinedAt ascending).
-  // Priority 2: longest-connected peer.
-  const all = Array.from(hostPeers.values()).filter((p) => p.handle !== "__pending__")
-  const vols = all.filter((p) => p.isVolunteer).sort((a, b) => a.joinedAt - b.joinedAt)
-  const nonVols = all.filter((p) => !p.isVolunteer).sort((a, b) => a.joinedAt - b.joinedAt)
-  const seen = new Set<string>()
-  const ordered: PeerInfo[] = []
-  for (const p of [...vols, ...nonVols]) {
-    if (seen.has(p.handle)) continue
-    seen.add(p.handle)
-    ordered.push(p)
-  }
-  return ordered.map((p) => ({ handle: p.handle, code: mintCode(p.handle) }))
-}
+// ── Transfer (delegates to TransferController) ─────────────────────────────
 
 async function startLeave(
-  toast: ToastFn,
-  log: LogFn,
+  _toast: ToastFn,
+  _log: LogFn,
 ): Promise<void> {
   if (role !== "host") return
-  if (pendingLeave !== "none") return
-
-  const snapshot = peerListForBroadcast(hostRole?.getPeers() ?? hostPeers)
-  if (snapshot.length === 0) {
-    await log("info", "host leaving with no peers; ending session")
-    stopHost(toast, log)
-    role = "idle"
-    return
-  }
-
-  pendingLeave = "pending"
-  successorQueue = buildSuccessorQueue()
-  preLeaveSnapshot = {
-    code: hostCode ?? "",
-    handle: hostHandle ?? "host",
-    peers: snapshot,
-  }
-
-  broadcast({ type: "host_leaving", grace_s: GRACE_S })
-  await log("info", "host leaving; grace started", { grace_s: GRACE_S, peers: snapshot.length })
-  await toast(`leaving in ${GRACE_S}s — auto-transfer pending`, "info", "multiplayer")
-
-  leaveTimer = setTimeout(() => {
-    void onGraceExpired(toast, log)
-  }, GRACE_S * 1000)
+  await tc!.startLeave()
 }
 
 async function cancelLeave(
-  toast: ToastFn,
-  log: LogFn,
+  _toast: ToastFn,
+  _log: LogFn,
 ): Promise<void> {
-  if (pendingLeave !== "pending") return
-  clearLeaveTimers()
-  pendingLeave = "none"
-  successorQueue = []
-  preLeaveSnapshot = null
-  broadcast({ type: "leave_cancelled" })
-  await log("info", "host leave cancelled")
-  await toast("leave cancelled — staying as host", "info", "multiplayer")
+  await tc!.cancelLeave()
 }
 
 async function onGraceExpired(
-  toast: ToastFn,
-  log: LogFn,
+  _toast: ToastFn,
+  _log: LogFn,
 ): Promise<void> {
-  if (pendingLeave !== "pending") return
-  leaveTimer = null
-  if (successorQueue.length === 0) {
-    broadcast({ type: "session_ended", reason: "no_peers" })
-    await store.recordSessionEnded(hostHandle ?? "host", "no_peers")
-    stopHost(toast, log)
-    role = "idle"
-    pendingLeave = "none"
-    await toast("session ended (no successors)", "warning", "multiplayer")
-    return
-  }
-  await tryNextSuccessor(toast, log)
+  await tc!.onGraceExpired()
 }
 
 async function tryNextSuccessor(
-  toast: ToastFn,
-  log: LogFn,
+  _toast: ToastFn,
+  _log: LogFn,
 ): Promise<void> {
-  if (pendingLeave !== "pending") return
-  const next = successorQueue.shift()
-  if (!next) {
-    broadcast({ type: "session_ended", reason: "no_reachable_successor" })
-    await store.recordSessionEnded(hostHandle ?? "host", "no_reachable_successor")
-    stopHost(toast, log)
-    role = "idle"
-    pendingLeave = "none"
-    await toast("session ended: no reachable successor", "error", "multiplayer")
-    return
-  }
-  pendingLeave = "transferring"
-  const successorWs = findPeerWs(next.handle)
-  if (!successorWs) {
-    // Successor disconnected between queueing and now; cascade.
-    pendingLeave = "pending"
-    await onTransferFailed("successor_disconnected", toast, log)
-    return
-  }
-  const snapshot = preLeaveSnapshot
-  if (!snapshot) {
-    pendingLeave = "pending"
-    await onTransferFailed("no_snapshot", toast, log)
-    return
-  }
-
-  sendToPeer(successorWs, {
-    type: "transfer_to_me",
-    new_handle: next.handle,
-    old_code: snapshot.code,
-    old_handle: snapshot.handle,
-    peers: snapshot.peers.filter((p) => p.handle !== next.handle),
-  })
-  await log("info", "transfer_to_me sent", { successor: next.handle })
-  await toast(`transferring to ${next.handle}...`, "info", "multiplayer")
-
-  transferTimer = setTimeout(() => {
-    void onTransferFailed("timeout", toast, log)
-  }, CASCADE_TIMEOUT_MS)
+  await tc!.tryNextSuccessor()
 }
 
 async function onTransferConfirmed(
   successorWs: { send(data: string): unknown },
   newCode: string,
   newUrl: string,
-  toast: ToastFn,
-  log: LogFn,
+  _toast: ToastFn,
+  _log: LogFn,
 ): Promise<void> {
-  if (transferTimer) {
-    clearTimeout(transferTimer)
-    transferTimer = null
-  }
-  const snapshot = preLeaveSnapshot
-  if (!snapshot) return
-
-  await log("info", "transfer confirmed by successor", { newCode, newUrl })
-  await toast(`✓ transferred to ${newUrl.replace(/^ws:\/\//, "")}`, "success", "multiplayer")
-
-  // Persist the host change with the new grace code.
-  await store.recordHostChanged(
-    parseCode(newCode)?.handle ?? "host",
-    newCode,
-    snapshot.code,
-    snapshot.handle,
-    newUrl,
-  )
-
-  // Tell all other peers to switch to the new host.
-  broadcast(
-    {
-      type: "transfer_start",
-      new_code: newCode,
-      new_url: newUrl,
-      new_handle: parseCode(newCode)?.handle ?? "host",
-    },
-    successorWs,
-  )
-
-  // End our host role.
-  stopHost(toast, log)
-  role = "idle"
-  pendingLeave = "none"
-  preLeaveSnapshot = null
-  successorQueue = []
+  await tc!.onTransferConfirmed(successorWs, newCode, newUrl)
 }
 
 async function onTransferFailed(
   reason: string,
-  toast: ToastFn,
-  log: LogFn,
+  _toast: ToastFn,
+  _log: LogFn,
 ): Promise<void> {
-  if (transferTimer) {
-    clearTimeout(transferTimer)
-    transferTimer = null
-  }
-  await log("warn", "transfer failed; cascading", { reason })
-  await toast(`transfer failed (${reason}); trying next successor`, "warning", "multiplayer")
-  pendingLeave = "pending"
-  await tryNextSuccessor(toast, log)
+  await tc!.onTransferFailed(reason)
 }
 
 // ── Guest role ────────────────────────────────────────────────────────────
@@ -940,6 +758,36 @@ export default async (input: PluginInput) => {
   const envHost = resolveHost()
   hostAddr = `${envHost}:${envPort}`
 
+  tc = new TransferController(
+    {
+      getHostRole: () => hostRole,
+      getHostPeers: () => hostPeers,
+      getHostCode: () => hostCode,
+      getHostHandle: () => hostHandle,
+      mintCode,
+      stopHost() {
+        if (hostServer) {
+          try {
+            hostServer.stop(true)
+          } catch {
+            // ignore
+          }
+          hostServer = null
+          hostCode = null
+          hostHandle = null
+          hostPeers = new Map()
+          role = "idle"
+        }
+      },
+      recordSessionEnded: (h, r) => store.recordSessionEnded(h, r),
+      recordHostChanged: (nh, nc, oc, oh, nu) => store.recordHostChanged(nh, nc, oc, oh, nu),
+      toast,
+      log,
+    },
+    GRACE_S * 1000,
+    CASCADE_TIMEOUT_MS,
+  )
+
   // Persist handle on first load (if not from env).
   if (!process.env["MP_HANDLE"]) {
     const persisted = readHandleFileSync()
@@ -1035,7 +883,7 @@ export default async (input: PluginInput) => {
         args: {},
         async execute() {
           if (role !== "host") return "Only the host can cancel a leave."
-          if (pendingLeave !== "pending") return "No leave is pending."
+          if (tc?.getState() !== "pending") return "No leave is pending."
           await cancelLeave(toast, log)
           return "Leave cancelled. Staying as host."
         },
@@ -1087,8 +935,8 @@ export default async (input: PluginInput) => {
                 lines.push(`  - ${p.handle} (joined ${Math.round((Date.now() - p.joinedAt) / 1000)}s ago)${v}`)
               }
             }
-            if (pendingLeave !== "none") {
-              lines.push(`leaving: ${pendingLeave}`)
+            if (tc?.isPending()) {
+              lines.push(`leaving: ${tc.getState()}`)
             }
             return lines.join("\n")
           }
