@@ -7,18 +7,16 @@ import { resolvePort, resolveHost } from "./env/index.ts"
 import { IdleRole, TransferController } from "./role/index.ts"
 import { isValidHandle, normalizeHandle, osUser, mintCode } from "./handle/index.ts"
 import { GRACE_S, CASCADE_TIMEOUT_MS } from "./constants.ts"
-import { companionSocketPath, companionTokenPath } from "./companion/paths.ts"
-import { detectStrategy, manualCommand, spawnStrategy } from "./companion/spawner.ts"
+import { companionSocketPath } from "./companion/paths.ts"
+import { detectStrategy, spawnStrategy } from "./companion/spawner.ts"
 
-function companionBinPath(): string {
+function companionExec(): string {
   // Allow override via env (e.g. for testing or custom installs)
   const override = process.env["MP_COMPANION_BIN"]
   if (override) return override
-  // The companion is published as a separate workspace package at
-  // packages/multiplayer-watch/.  When the plugin is loaded from
-  // packages/plugin-multiplayer/dist/ the relative path is
-  // ../../../multiplayer-watch/bin/multiplayer-watch.js.
-  return new URL("../../../multiplayer-watch/bin/multiplayer-watch.js", import.meta.url).pathname
+  // Default to npx which auto-installs the published @hmanlab/multiplayer-watch
+  // package. The relative-path approach was fragile across install layouts.
+  return "npx -y @hmanlab/multiplayer-watch"
 }
 
 export async function createMultiplayerPlugin(input: PluginInput) {
@@ -101,68 +99,9 @@ export async function createMultiplayerPlugin(input: PluginInput) {
     role: plugin.roleState.kind,
   })
 
-  // Start the companion UDS server asynchronously so it never blocks the
-  // OpenCode prompt (NFR-PF.4: ≤ 50ms plugin startup overhead).
-  // The plugin auto-spawns the companion in a new tab when possible
-  // (tmux split, iTerm2 tab, Windows Terminal tab, Linux tab-capable
-  // terminals). `MP_NO_COMPANION=1` disables the auto-spawn entirely
-  // (tests use this).
-  let companionSpawned = false
-  if (process.env["MP_NO_COMPANION"] === "1" || process.env["MP_NO_COMPANION"] === "true") {
-    // No-op: tests and power users can still call startCompanionServer directly.
-  } else {
-    void (async () => {
-      const server = await plugin.startCompanionServer()
-      if (!server) return
-      const strategy = detectStrategy({
-        env: {
-          TMUX: process.env["TMUX"],
-          TERM_PROGRAM: process.env["TERM_PROGRAM"],
-          ITERM_SESSION_ID: process.env["ITERM_SESSION_ID"],
-          TERMINAL: process.env["TERMINAL"],
-          PATH: process.env["PATH"],
-          MP_NO_COMPANION: process.env["MP_NO_COMPANION"],
-        },
-      })
-      if (strategy === "manual") {
-        const cmd = manualCommand({
-          binPath: companionBinPath(),
-          socketPath: companionSocketPath(),
-          token: server.getToken(),
-        })
-        await toaster.show(`Run \`${cmd}\` in another terminal for the companion pane`, "info", "multiplayer")
-        return
-      }
-      const result = spawnStrategy({
-        strategy,
-        binPath: companionBinPath(),
-        socketPath: companionSocketPath(),
-        token: server.getToken(),
-        cwd: process.cwd(),
-      })
-      if (!result.ok) {
-        await toaster.show(
-          `Companion spawn failed (${result.strategy}: ${result.reason}). Run \`${result.command}\` in another terminal.`,
-          "warning",
-          "multiplayer",
-        )
-        return
-      }
-      companionSpawned = true
-      await logger.log("info", "companion spawned", { strategy, pid: result.pid })
-    })()
-  }
-
   return {
     dispose: async () => {
       try {
-        if (companionSpawned) {
-          // The companion lives in a tmux pane or detached window —
-          // closing the plugin process won't kill it. We rely on the
-          // goodbye message and the UDS connection dropping to let
-          // the companion shut down on its own. For Phase 03, we
-          // don't track the spawned PID.
-        }
         await plugin.stopCompanionServer()
       } catch {
         // best-effort
@@ -287,16 +226,11 @@ export async function createMultiplayerPlugin(input: PluginInput) {
             },
           })
           if (strategy === "manual") {
-            const cmd = manualCommand({
-              binPath: companionBinPath(),
-              socketPath: companionSocketPath(),
-              token: server.getToken(),
-            })
-            return `Run this in another terminal to open the companion:\n${cmd}\n\nOr install globally: npm install -g @hmanlab/multiplayer-watch`
+            return `Run \`${companionExec()}\` in another terminal to open the companion.`
           }
           const result = spawnStrategy({
             strategy,
-            binPath: companionBinPath(),
+            binPath: companionExec(),
             socketPath: companionSocketPath(),
             token: server.getToken(),
             cwd: process.cwd(),

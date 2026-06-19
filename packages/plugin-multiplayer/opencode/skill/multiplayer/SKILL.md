@@ -62,7 +62,7 @@ MP_PORT=7332 MP_HOST=192.168.1.42 opencode
 
 ## Companion pane
 
-After `opencode` is fully initialized, the plugin spawns a **separate Node + Ink TUI** in a new tab (or, if you're already inside tmux, a split pane):
+The companion is launched explicitly by the user via `mp_watch`. It opens as a new tab in the user's terminal:
 
 1. **tmux split** — if `$TMUX` is set and `tmux` is on `$PATH`, the current tmux pane splits horizontally.
 2. **tmux detached** — if `tmux` is on `$PATH` but `$TMUX` is not set (you're not in a tmux session), a fresh detached tmux session named `multiplayer-companion` is created. Attach to it later with `tmux attach -t multiplayer-companion`. Override the session name with `MP_COMPANION_TMUX_SESSION=mysession`.
@@ -71,12 +71,12 @@ After `opencode` is fully initialized, the plugin spawns a **separate Node + Ink
 5. **Manual fallback** — on any other terminal, the plugin emits a toast with the command to run:
 
    ```bash
-   npx @hmanlab/multiplayer-watch
+   npx -y @hmanlab/multiplayer-watch
    ```
 
-   The `npx` command connects to the plugin's Unix-domain socket and renders the same UI in any other terminal.
+   The `npx` command auto-installs the companion and connects to the plugin's Unix-domain socket.
 
-The companion shows: presence list (left), chat history (right, scrollable), input box (bottom). The plugin spawns asynchronously after the prompt is up — startup overhead is ≤ 50ms.
+The companion shows: presence list (left), chat history (right, scrollable), input box (bottom). The companion is opt-in — it only opens when the user runs `mp_watch`.
 
 To disable the companion entirely (e.g. for headless setups), set `MP_NO_COMPANION=1` before launching `opencode`.
 
@@ -168,7 +168,7 @@ The chosen handle is also persisted to `~/.hl-plugins/multiplayer/handle`.
 
 ## Notes for the LLM
 
-- The plugin load is a no-op. No toasts, no port binding, no async work.
+- The plugin load is a no-op. No toasts, no port binding, no async work. The companion only opens when the user runs `mp_watch`.
 - `MP_PORT` must match between host and guest. `MP_HOST` must point to the host machine on the guest's side.
 - The host's signaling server terminates when the host's opencode exits (or `mp_leave` after the transfer).
 - Real WebRTC is deferred. The WebSocket is used as both signaling and data channel.
