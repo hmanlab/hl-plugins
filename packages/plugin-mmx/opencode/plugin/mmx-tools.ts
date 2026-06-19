@@ -266,13 +266,23 @@ export default async () => {
           "Show current Token Plan usage and remaining quota (5-hour rolling and weekly windows). Use when the user asks about quota, usage, limits, or how many calls they have left.",
         args: {},
         async execute(_args, ctx) {
-          const proc = await ctx.$`mmx quota`.nothrow()
-          if (proc.exitCode === 0) {
-            const out = proc.stdout.toString().trim()
-            if (out) return out
+          const proc = await $`mmx quota`.nothrow()
+          if (proc.exitCode !== 0) {
+            return `mmx quota failed (exit ${proc.exitCode}):\n${proc.stderr.toString() || "(no stderr)"}`
           }
-          const fallback = await ctx.$`mmx quota show --non-interactive`.nothrow()
-          return fallback.stdout.toString().trim() || fallback.stderr.toString().trim() || "(no quota info)"
+          const raw = proc.stdout.toString().trim()
+          let data: any
+          try {
+            data = JSON.parse(raw)
+          } catch {
+            return raw || "(no quota info)"
+          }
+          const rows = (data.model_remains ?? []).map((m: any) => {
+            const reset = new Date(m.end_time).toUTCString().replace(/^[^,]+,\s*/, "")
+            return `| ${m.model_name} | ${m.current_interval_remaining_percent}% left | ${m.current_weekly_remaining_percent}% left | resets ${reset} |`
+          })
+          const header = "| Model | 5h window | Weekly | Next reset |\n|---|---|---|---|"
+          return `Quota — Token Plan\n\n${header}\n${rows.join("\n")}\n`
         },
       }),
     },
