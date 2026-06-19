@@ -7,7 +7,9 @@ export async function testStatePersistence(): Promise<void> {
   const { hooks, toasts } = await newPlugin()
   await hooks.tool.mp_host.execute({}, makeToolContext())
   const inviteToast = await waitForToast(toasts, "invite:", 2000)
-  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message.replace(/^invite:\s*/, "").trim()
+  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message
+    .replace(/^invite:\s*/, "")
+    .trim()
 
   const state = await readStateFile()
   await expect(state !== null, "state.json exists")

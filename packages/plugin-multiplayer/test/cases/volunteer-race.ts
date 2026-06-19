@@ -7,7 +7,9 @@ export async function testVolunteerRace(): Promise<void> {
   const { hooks, toasts, port } = await newPlugin()
   await hooks.tool.mp_host.execute({}, makeToolContext())
   const inviteToast = await waitForToast(toasts, "invite:", 2000)
-  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message.replace(/^invite:\s*/, "").trim()
+  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message
+    .replace(/^invite:\s*/, "")
+    .trim()
 
   // Carol joins first, then Dave. Carol is longest-connected.
   const carol = await openGuest(port, code, "carol")
@@ -22,8 +24,7 @@ export async function testVolunteerRace(): Promise<void> {
 
   const status = await hooks.tool.mp_status.execute({}, makeToolContext())
   await expect(
-    status.includes("carol") && status.includes("dave") &&
-    (status.match(/\[volunteer\]/g) ?? []).length >= 2,
+    status.includes("carol") && status.includes("dave") && (status.match(/\[volunteer\]/g) ?? []).length >= 2,
     "both peers shown as volunteers",
   )
 

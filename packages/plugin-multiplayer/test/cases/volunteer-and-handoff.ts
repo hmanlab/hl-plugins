@@ -9,7 +9,9 @@ export async function testVolunteerAndHandoff(): Promise<void> {
   const oldHandle = `tester${testCounter}`
   await hooks.tool.mp_host.execute({}, makeToolContext())
   const inviteToast = await waitForToast(toasts, "invite:", 2000)
-  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message.replace(/^invite:\s*/, "").trim()
+  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message
+    .replace(/^invite:\s*/, "")
+    .trim()
 
   const g1 = await openGuest(port, code, "carol")
   await sleep(50)
@@ -28,8 +30,14 @@ export async function testVolunteerAndHandoff(): Promise<void> {
   await expect(leaveResult.includes("Leaving in"), "leave starts grace")
 
   await sleep(50)
-  await expect(g1.messages.some((m) => m.type === "host_leaving"), "carol got host_leaving")
-  await expect(g2.messages.some((m) => m.type === "host_leaving"), "dave got host_leaving")
+  await expect(
+    g1.messages.some((m) => m.type === "host_leaving"),
+    "carol got host_leaving",
+  )
+  await expect(
+    g2.messages.some((m) => m.type === "host_leaving"),
+    "dave got host_leaving",
+  )
 
   const start = Date.now()
   let toMe: GuestMessage | undefined
@@ -43,7 +51,10 @@ export async function testVolunteerAndHandoff(): Promise<void> {
   if (toMe && toMe.type === "transfer_to_me") {
     await expect(toMe.new_handle === "carol", `transfer_to_me.new_handle === carol (got ${toMe.new_handle})`)
     await expect(toMe.old_code === code, `transfer_to_me.old_code matches (got ${toMe.old_code})`)
-    await expect(toMe.peers.some((p) => p.handle === "dave"), "transfer_to_me.peers includes dave")
+    await expect(
+      toMe.peers.some((p) => p.handle === "dave"),
+      "transfer_to_me.peers includes dave",
+    )
   }
 
   console.log("  (waiting up to 12s for cascade → session_ended…)")
@@ -56,7 +67,10 @@ export async function testVolunteerAndHandoff(): Promise<void> {
   }
   await expect(ended !== undefined, "dave got session_ended (cascade exhausted)")
   if (ended && ended.type === "session_ended") {
-    await expect(ended.reason === "no_reachable_successor", `ended.reason = no_reachable_successor (got ${ended.reason})`)
+    await expect(
+      ended.reason === "no_reachable_successor",
+      `ended.reason = no_reachable_successor (got ${ended.reason})`,
+    )
   }
 
   const finalStatus = await hooks.tool.mp_status.execute({}, makeToolContext())

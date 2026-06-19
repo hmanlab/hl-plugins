@@ -25,8 +25,7 @@ export function readOpencodeConfig(): OpencodeConfig {
     return JSON.parse(text) as OpencodeConfig
   } catch (err) {
     throw new Error(
-      `Failed to parse ${file}: ${(err as Error).message}\n` +
-        `Fix or remove the file, then retry.`,
+      `Failed to parse ${file}: ${(err as Error).message}\n` + `Fix or remove the file, then retry.`,
     )
   }
 }

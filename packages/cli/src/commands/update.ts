@@ -21,9 +21,7 @@ async function updateRequirement(req: PluginRequirement): Promise<string> {
   const cmd = deriveUpdate(req)
   const res = await run(cmd, { throwOnError: false })
   if (res.code !== 0) {
-    throw new Error(
-      `Update failed: ${cmd}\n  ${(res.stderr || res.stdout).trim() || "(no output)"}`,
-    )
+    throw new Error(`Update failed: ${cmd}\n  ${(res.stderr || res.stdout).trim() || "(no output)"}`)
   }
   // Re-probe
   const verify = await run(req.check, { throwOnError: false })

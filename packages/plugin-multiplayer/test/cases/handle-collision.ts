@@ -7,7 +7,9 @@ export async function testHandleCollision(): Promise<void> {
   const { hooks, toasts, port } = await newPlugin()
   await hooks.tool.mp_host.execute({}, makeToolContext())
   const inviteToast = await waitForToast(toasts, "invite:", 2000)
-  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message.replace(/^invite:\s*/, "").trim()
+  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message
+    .replace(/^invite:\s*/, "")
+    .trim()
 
   const g1 = await openGuest(port, code, "alice")
   await sleep(30)
@@ -20,7 +22,10 @@ export async function testHandleCollision(): Promise<void> {
   const unique = new Set(handles)
   await expect(handles.length === 2 && unique.size === 2, `two distinct handles (got ${handles.join(",")})`)
   await expect(handles.includes("alice"), "one handle is plain alice")
-  await expect(handles.some((h) => h.startsWith("alice-")), "one handle is alice-XXXX")
+  await expect(
+    handles.some((h) => h.startsWith("alice-")),
+    "one handle is alice-XXXX",
+  )
 
   g1.close()
   g2.close()

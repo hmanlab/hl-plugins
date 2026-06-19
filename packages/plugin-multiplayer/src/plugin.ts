@@ -3,7 +3,14 @@ import { Toaster, Logger } from "./bridge/index.ts"
 import { StateStore, readHandleFileSync } from "./persistence/index.ts"
 import { resolvePort, resolveHost } from "./env/index.ts"
 import { IdleRole, HostRole, GuestRole, TransferController, type RoleState } from "./role/index.ts"
-import { isValidHandle, normalizeHandle, osUser, mintCode, isValidCode, assignCollisionSuffix } from "./handle/index.ts"
+import {
+  isValidHandle,
+  normalizeHandle,
+  osUser,
+  mintCode,
+  isValidCode,
+  assignCollisionSuffix,
+} from "./handle/index.ts"
 import { GRACE_S, CASCADE_TIMEOUT_MS, DEFAULT_PORT, DEFAULT_HOST } from "./constants.ts"
 import { peerListForBroadcast } from "./role/peer-helpers.ts"
 import type { PeerInfo, Role, HostSocketData } from "./types.ts"
@@ -185,7 +192,14 @@ export class MultiplayerPlugin {
       return { ok: false, reason: `not_idle (currently ${this.roleState.kind})` }
     }
 
-    const hr = new HostRole({ port: bindPort, host: bindHost, handle, state: this.store, toaster: this.toaster, logger: this.logger })
+    const hr = new HostRole({
+      port: bindPort,
+      host: bindHost,
+      handle,
+      state: this.store,
+      toaster: this.toaster,
+      logger: this.logger,
+    })
     const result = await hr.start()
 
     if (!result.ok) {
@@ -213,7 +227,11 @@ export class MultiplayerPlugin {
     } catch {
       this.sendToPeer(ws, { type: "auth_fail", reason: "invalid_json" })
       this.sendToPeer(ws, { type: "bye" })
-      try { ws.close() } catch { /* ignore */ }
+      try {
+        ws.close()
+      } catch {
+        /* ignore */
+      }
       return
     }
 
@@ -221,13 +239,21 @@ export class MultiplayerPlugin {
       if (msg.type !== "auth") {
         this.sendToPeer(ws, { type: "auth_fail", reason: "expected_auth" })
         this.sendToPeer(ws, { type: "bye" })
-        try { ws.close() } catch { /* ignore */ }
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
         return
       }
       if (!isValidCode(msg.code)) {
         this.sendToPeer(ws, { type: "auth_fail", reason: "invalid_code" })
         this.sendToPeer(ws, { type: "bye" })
-        try { ws.close() } catch { /* ignore */ }
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
         await this.toaster.show("guest sent an invalid code", "warning", "multiplayer")
         return
       }
@@ -237,7 +263,11 @@ export class MultiplayerPlugin {
       if (!isCurrent && !isGrace) {
         this.sendToPeer(ws, { type: "auth_fail", reason: "unknown_code" })
         this.sendToPeer(ws, { type: "bye" })
-        try { ws.close() } catch { /* ignore */ }
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
         return
       }
       const peer: PeerInfo = { handle: "__pending__", joinedAt: Date.now(), isVolunteer: false }
@@ -258,7 +288,11 @@ export class MultiplayerPlugin {
       if (!isValidHandle(requested)) {
         this.sendToPeer(ws, { type: "auth_fail", reason: "invalid_handle" })
         this.sendToPeer(ws, { type: "bye" })
-        try { ws.close() } catch { /* ignore */ }
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
         return
       }
       const peer = ws.data.peer
@@ -375,7 +409,8 @@ export class MultiplayerPlugin {
 
   mpCode(): string {
     if (this.role === "host") return this.hostCode ?? "(no code)"
-    if (this.role === "guest") return this.guestRole?.getHostHandle() ? `host handle: ${this.guestRole.getHostHandle()}` : "(unknown)"
+    if (this.role === "guest")
+      return this.guestRole?.getHostHandle() ? `host handle: ${this.guestRole.getHostHandle()}` : "(unknown)"
     return "Not in a session. Use mp_host or mp_join first."
   }
 
@@ -450,7 +485,13 @@ export class MultiplayerPlugin {
   }
 
   private async promoteToHost(
-    msg: { type: "transfer_to_me"; new_handle: string; old_code: string; old_handle: string; peers: { handle: string; joinedAt: number }[] },
+    msg: {
+      type: "transfer_to_me"
+      new_handle: string
+      old_code: string
+      old_handle: string
+      peers: { handle: string; joinedAt: number }[]
+    },
     oldHostWs: WebSocket,
     _oldHostUrl: string,
   ): Promise<{ ok: true; newCode: string; newUrl: string } | { ok: false; reason: string }> {
@@ -485,11 +526,7 @@ export class MultiplayerPlugin {
     return { ok: true, newCode: result.code, newUrl: result.url }
   }
 
-  private async reconnectAsGuest(
-    newCode: string,
-    newUrl: string,
-    mode: "join" | "rejoin",
-  ): Promise<void> {
+  private async reconnectAsGuest(newCode: string, newUrl: string, mode: "join" | "rejoin"): Promise<void> {
     // The old WS has been closed by the transfer_start handler.
     // Re-dial the new host with the new code.
     const handle = this.resolveHandle()
@@ -513,11 +550,7 @@ export class MultiplayerPlugin {
       this.guestRole = null
       this.guestWs = null
       this.resetToIdleRole()
-      await this.toaster.show(
-        `reconnect after transfer failed: ${result.reason}`,
-        "error",
-        "multiplayer",
-      )
+      await this.toaster.show(`reconnect after transfer failed: ${result.reason}`, "error", "multiplayer")
     }
   }
 

@@ -7,7 +7,9 @@ export async function testThreePlusPeers(): Promise<void> {
   const { hooks, toasts, port } = await newPlugin()
   await hooks.tool.mp_host.execute({}, makeToolContext())
   const inviteToast = await waitForToast(toasts, "invite:", 2000)
-  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message.replace(/^invite:\s*/, "").trim()
+  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message
+    .replace(/^invite:\s*/, "")
+    .trim()
 
   const g1 = await openGuest(port, code, "carol")
   await sleep(30)
@@ -17,8 +19,15 @@ export async function testThreePlusPeers(): Promise<void> {
   await sleep(50)
 
   // All three guests should have received welcome and peers_update.
-  for (const [name, g] of [["carol", g1], ["dave", g2], ["eve", g3]] as const) {
-    await expect(g.messages.some((m) => m.type === "welcome"), `${name} got welcome`)
+  for (const [name, g] of [
+    ["carol", g1],
+    ["dave", g2],
+    ["eve", g3],
+  ] as const) {
+    await expect(
+      g.messages.some((m) => m.type === "welcome"),
+      `${name} got welcome`,
+    )
   }
 
   // The host's status should list all three.

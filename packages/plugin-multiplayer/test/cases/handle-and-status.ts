@@ -8,7 +8,9 @@ export async function testHandleAndStatus(): Promise<void> {
   await hooks.tool.mp_host.execute({}, makeToolContext())
   const inviteToast = await waitForToast(toasts, "invite:", 2000)
   await expect(inviteToast !== null, "invite toast")
-  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message.replace(/^invite:\s*/, "").trim()
+  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message
+    .replace(/^invite:\s*/, "")
+    .trim()
 
   const codeRes = await hooks.tool.mp_code.execute({}, makeToolContext())
   await expect(codeRes === code, `mp_code returns ${code} (got ${codeRes})`)

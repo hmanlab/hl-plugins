@@ -19,12 +19,8 @@ export class StateStore {
       const text = await file.text()
       const parsed = JSON.parse(text) as Partial<SessionState>
       return {
-        myHandle:
-          typeof parsed.myHandle === "string"
-            ? parsed.myHandle
-            : this.handleResolver(),
-        lastHostUrl:
-          typeof parsed.lastHostUrl === "string" ? parsed.lastHostUrl : null,
+        myHandle: typeof parsed.myHandle === "string" ? parsed.myHandle : this.handleResolver(),
+        lastHostUrl: typeof parsed.lastHostUrl === "string" ? parsed.lastHostUrl : null,
         graceCodes: Array.isArray(parsed.graceCodes)
           ? parsed.graceCodes.filter(
               (g): g is GraceCode =>
@@ -94,10 +90,7 @@ export class StateStore {
     try {
       const state = this.prune(await this.read())
       const validUntil = Date.now() + REJOIN_TTL_MS
-      const graceCodes = [
-        ...state.graceCodes,
-        { code: oldCode, handle: oldHandle, validUntil },
-      ]
+      const graceCodes = [...state.graceCodes, { code: oldCode, handle: oldHandle, validUntil }]
       const next = this.pushHistory(
         { ...state, myHandle: newHandle, graceCodes },
         {
@@ -148,10 +141,7 @@ export class StateStore {
     try {
       const state = this.prune(await this.read())
       const validUntil = Date.now() + REJOIN_TTL_MS
-      const graceCodes = [
-        ...state.graceCodes,
-        { code: oldCode, handle: oldHandle, validUntil },
-      ]
+      const graceCodes = [...state.graceCodes, { code: oldCode, handle: oldHandle, validUntil }]
       const next = this.pushHistory(
         { ...state, myHandle: newHandle, graceCodes },
         {

@@ -15,12 +15,7 @@ import { opencodeConfigDir, tilde } from "../lib/paths.js"
 export async function help(_args: string[]): Promise<number> {
   const out: string[] = []
   out.push(ui.header("hl-plugins — curated OpenCode plugins"))
-  out.push(
-    ui.bold("Usage:"),
-    "  hl-plugins <command> [args]",
-    "",
-    ui.bold("Commands:"),
-  )
+  out.push(ui.bold("Usage:"), "  hl-plugins <command> [args]", "", ui.bold("Commands:"))
   for (const [name, desc] of rows) {
     out.push(`  ${ui.cyan(name.padEnd(38))} ${desc}`)
   }

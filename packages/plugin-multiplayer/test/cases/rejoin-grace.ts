@@ -21,11 +21,16 @@ export async function testRejoinGrace(): Promise<void> {
 
   await hooks.tool.mp_host.execute({}, makeToolContext())
   const inviteToast = await waitForToast(toasts, "invite:", 2000)
-  const currentCode = (inviteToast!.args[0] as { body: { message: string } }).body.message.replace(/^invite:\s*/, "").trim()
+  const currentCode = (inviteToast!.args[0] as { body: { message: string } }).body.message
+    .replace(/^invite:\s*/, "")
+    .trim()
 
   // The grace code is in the list → accepted.
   const g = await openGuest(port, graceCode, "rejoiner")
-  await expect(g.messages.some((m) => m.type === "welcome"), "grace code in list was accepted by host")
+  await expect(
+    g.messages.some((m) => m.type === "welcome"),
+    "grace code in list was accepted by host",
+  )
   g.close()
   await sleep(30)
 
@@ -48,7 +53,10 @@ export async function testRejoinGrace(): Promise<void> {
 
   // The current code is still accepted (sanity check).
   const g2 = await openGuest(port, currentCode, "another")
-  await expect(g2.messages.some((m) => m.type === "welcome"), "current code is still accepted")
+  await expect(
+    g2.messages.some((m) => m.type === "welcome"),
+    "current code is still accepted",
+  )
   g2.close()
   await sleep(30)
 

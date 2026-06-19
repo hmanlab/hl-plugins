@@ -6,13 +6,7 @@ export type GraceCode = { code: string; handle: string; validUntil: number }
 
 export type HistoryEntry = {
   ts: number
-  event:
-    | "host_started"
-    | "host_changed"
-    | "host_cancelled"
-    | "session_ended"
-    | "guest_joined"
-    | "guest_left"
+  event: "host_started" | "host_changed" | "host_cancelled" | "session_ended" | "guest_joined" | "guest_left"
   handle?: string
   detail?: string
 }
@@ -30,6 +24,4 @@ export type PeerInfo = {
   isVolunteer: boolean
 }
 
-export type HostSocketData =
-  | { state: "awaiting_auth" }
-  | { state: "authenticated"; peer: PeerInfo }
+export type HostSocketData = { state: "awaiting_auth" } | { state: "authenticated"; peer: PeerInfo }

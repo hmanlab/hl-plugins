@@ -80,8 +80,7 @@ export const ui = {
   async promptHidden(question: string): Promise<string> {
     if (!stdin.isTTY) {
       throw new Error(
-        "Cannot prompt for hidden input: stdin is not a TTY. " +
-          "Pipe the value via env or --key instead.",
+        "Cannot prompt for hidden input: stdin is not a TTY. " + "Pipe the value via env or --key instead.",
       )
     }
     const rl = createInterface({ input: stdin, output: stdout, terminal: true })

@@ -24,7 +24,13 @@ export interface TransferControllerCallbacks {
   mintCode(handle: string): string
   stopHost(): void
   recordSessionEnded(handle: string, reason: string): Promise<void>
-  recordHostChanged(newHandle: string, newCode: string, oldCode: string, oldHandle: string, newUrl: string): Promise<void>
+  recordHostChanged(
+    newHandle: string,
+    newCode: string,
+    oldCode: string,
+    oldHandle: string,
+    newUrl: string,
+  ): Promise<void>
   toast: Toaster["show"]
   log: Logger["log"]
 }
@@ -34,7 +40,8 @@ export class TransferController {
   private leaveTimer: ReturnType<typeof setTimeout> | null = null
   private transferTimer: ReturnType<typeof setTimeout> | null = null
   private queue: { handle: string; code: string }[] = []
-  private snapshot: { code: string; handle: string; peers: { handle: string; joinedAt: number }[] } | null = null
+  private snapshot: { code: string; handle: string; peers: { handle: string; joinedAt: number }[] } | null =
+    null
 
   constructor(
     private cb: TransferControllerCallbacks,
@@ -114,7 +121,10 @@ export class TransferController {
       peers,
     }
     this.broadcast({ type: "host_leaving", grace_s: this.graceMs / 1000 })
-    await this.cb.log("info", "host leaving; grace started", { grace_s: this.graceMs / 1000, peers: peers.length })
+    await this.cb.log("info", "host leaving; grace started", {
+      grace_s: this.graceMs / 1000,
+      peers: peers.length,
+    })
     await this.cb.toast(`leaving in ${this.graceMs / 1000}s — auto-transfer pending`, "info", "multiplayer")
     this.leaveTimer = setTimeout(() => {
       void this.onGraceExpired()
@@ -184,7 +194,11 @@ export class TransferController {
     }, this.cascadeMs)
   }
 
-  async onTransferConfirmed(successorWs: { send(data: string): unknown }, newCode: string, newUrl: string): Promise<void> {
+  async onTransferConfirmed(
+    successorWs: { send(data: string): unknown },
+    newCode: string,
+    newUrl: string,
+  ): Promise<void> {
     if (this.transferTimer) {
       clearTimeout(this.transferTimer)
       this.transferTimer = null
@@ -194,7 +208,7 @@ export class TransferController {
     await this.cb.log("info", "transfer confirmed by successor", { newCode, newUrl })
     await this.cb.toast(`✓ transferred to ${newUrl.replace(/^ws:\/\//, "")}`, "success", "multiplayer")
     await this.cb.recordHostChanged(
-      newCode && newCode.startsWith("mp-") ? newCode.split("-")[1] ?? "host" : "host",
+      newCode && newCode.startsWith("mp-") ? (newCode.split("-")[1] ?? "host") : "host",
       newCode,
       snap.code,
       snap.handle,
@@ -205,7 +219,7 @@ export class TransferController {
         type: "transfer_start",
         new_code: newCode,
         new_url: newUrl,
-        new_handle: newCode && newCode.startsWith("mp-") ? newCode.split("-")[1] ?? "host" : "host",
+        new_handle: newCode && newCode.startsWith("mp-") ? (newCode.split("-")[1] ?? "host") : "host",
       },
       successorWs as Bun.ServerWebSocket<HostSocketData>,
     )

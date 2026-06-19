@@ -18,11 +18,16 @@ export async function testPhase01Baseline(): Promise<void> {
   await expect(hostResult.includes("Hosting on") && hostResult.includes("Invite code:"), "mp_host ok")
   const inviteToast = await waitForToast(toasts, "invite:", 2000)
   await expect(inviteToast !== null, "host emitted invite toast")
-  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message.replace(/^invite:\s*/, "").trim()
+  const code = (inviteToast!.args[0] as { body: { message: string } }).body.message
+    .replace(/^invite:\s*/, "")
+    .trim()
   await expect(/^mp-[a-z0-9-]+-[a-z0-9]{4}-[a-z0-9]{4}$/.test(code), `code malformed: ${code}`)
 
   const g = await openGuest(port, code, "tester1-guest")
-  await expect(g.messages.some((m) => m.type === "welcome"), "guest got welcome")
+  await expect(
+    g.messages.some((m) => m.type === "welcome"),
+    "guest got welcome",
+  )
 
   await sleep(50)
   const status = await hooks.tool.mp_status.execute({}, makeToolContext())
@@ -32,7 +37,10 @@ export async function testPhase01Baseline(): Promise<void> {
   g.close()
   await sleep(50)
   const leaveResult = await hooks.tool.mp_leave.execute({}, makeToolContext())
-  await expect(leaveResult.includes("Leaving in") || leaveResult.includes("ended") || leaveResult.includes("pending"), "mp_leave ok")
+  await expect(
+    leaveResult.includes("Leaving in") || leaveResult.includes("ended") || leaveResult.includes("pending"),
+    "mp_leave ok",
+  )
   if (leaveResult.includes("Leaving in")) {
     await hooks.tool.mp_cancel_leave.execute({}, makeToolContext())
   }

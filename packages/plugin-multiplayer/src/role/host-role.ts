@@ -60,12 +60,17 @@ export class HostRole implements RoleState {
     return out
   }
 
-  broadcast(msg: { type: string; [key: string]: unknown }, except?: Bun.ServerWebSocket<HostSocketData>): void {
+  broadcast(
+    msg: { type: string; [key: string]: unknown },
+    except?: Bun.ServerWebSocket<HostSocketData>,
+  ): void {
     for (const ws of this.peers.keys()) {
       if (except && ws === except) continue
       try {
         ws.send(JSON.stringify(msg))
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -85,10 +90,15 @@ export class HostRole implements RoleState {
     return this.findPeerWs(handle)
   }
 
-  private sendToPeer(ws: { send(data: string): unknown }, msg: { type: string; [key: string]: unknown }): void {
+  private sendToPeer(
+    ws: { send(data: string): unknown },
+    msg: { type: string; [key: string]: unknown },
+  ): void {
     try {
       ws.send(JSON.stringify(msg))
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   private async onPeerClose(ws: Bun.ServerWebSocket<HostSocketData>): Promise<void> {
@@ -112,7 +122,11 @@ export class HostRole implements RoleState {
     } catch {
       this.sendToPeer(ws, { type: "auth_fail", reason: "invalid_json" })
       this.sendToPeer(ws, { type: "bye" })
-      try { ws.close() } catch { /* ignore */ }
+      try {
+        ws.close()
+      } catch {
+        /* ignore */
+      }
       return
     }
 
@@ -120,14 +134,22 @@ export class HostRole implements RoleState {
       if (msg.type !== "auth") {
         this.sendToPeer(ws, { type: "auth_fail", reason: "expected_auth" })
         this.sendToPeer(ws, { type: "bye" })
-        try { ws.close() } catch { /* ignore */ }
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
         return
       }
       const code = msg.code as string
       if (!isValidCode(code)) {
         this.sendToPeer(ws, { type: "auth_fail", reason: "invalid_code" })
         this.sendToPeer(ws, { type: "bye" })
-        try { ws.close() } catch { /* ignore */ }
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
         await this.opts.toaster.show("guest sent an invalid code", "warning", "multiplayer")
         return
       }
@@ -137,7 +159,11 @@ export class HostRole implements RoleState {
       if (!isCurrent && !isGrace) {
         this.sendToPeer(ws, { type: "auth_fail", reason: "unknown_code" })
         this.sendToPeer(ws, { type: "bye" })
-        try { ws.close() } catch { /* ignore */ }
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
         return
       }
       const peer: PeerInfo = { handle: "__pending__", joinedAt: Date.now(), isVolunteer: false }
@@ -154,7 +180,10 @@ export class HostRole implements RoleState {
 
     // authenticated
     if (msg.type === "hello") {
-      const requested = (msg.handle as string ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 16)
+      const requested = ((msg.handle as string) ?? "")
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "")
+        .slice(0, 16)
       const peer = ws.data.peer
       const existing = this.takenHandles()
       let assigned = requested
@@ -205,11 +234,17 @@ export class HostRole implements RoleState {
       for (const g of state.graceCodes) {
         this.graceCodes.add(g.code)
       }
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
 
     const handlers: HostServerHandlers = {
-      onMessage: (ws, raw) => { void this.onMessage(ws, raw) },
-      onClose: (ws) => { void this.onPeerClose(ws) },
+      onMessage: (ws, raw) => {
+        void this.onMessage(ws, raw)
+      },
+      onClose: (ws) => {
+        void this.onPeerClose(ws)
+      },
     }
 
     const result = await startHostServer({ port: this.opts.port, host: this.opts.host, handlers })
@@ -226,7 +261,12 @@ export class HostRole implements RoleState {
 
     this.server = result.server
     await this.opts.state.recordHostStarted(this.handle, code)
-    await this.opts.logger.log("info", "host started", { handle: this.handle, port: this.opts.port, code, url })
+    await this.opts.logger.log("info", "host started", {
+      handle: this.handle,
+      port: this.opts.port,
+      code,
+      url,
+    })
     await this.opts.toaster.show(`invite: ${code}`, "success", "multiplayer")
     await this.opts.toaster.show(`hosting on ${url}`, "info", "multiplayer")
     return { ok: true, code, url }
@@ -234,7 +274,11 @@ export class HostRole implements RoleState {
 
   stop(): void {
     if (this.server) {
-      try { this.server.stop(true) } catch { /* ignore */ }
+      try {
+        this.server.stop(true)
+      } catch {
+        /* ignore */
+      }
       this.server = null
     }
     this.code = null
