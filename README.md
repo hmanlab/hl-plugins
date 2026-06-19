@@ -1,40 +1,24 @@
-# hl-plugins
+# hl-plugins monorepo
 
-A monorepo of curated OpenCode plugins that unlock multimodal AI capabilities — installable with a single command.
+A monorepo of curated OpenCode plugins, installable with one command.
 
-## Install
+## Quick start (dev)
 
 ```bash
-npx hl-plugins install        # install all default plugins
-npx hl-plugins install mmx    # install just the mmx plugin
+npm install
+npm run help                # CLI skeleton
+node packages/cli/bin/hl-plugins.js help
 ```
 
-## Available plugins
+## Status
 
-| Plugin | Description | Requires |
-|---|---|---|
-| `@hl-plugins/mmx` | Image, video, music, speech, search, vision, and quota via MiniMax | [`mmx-cli`](https://github.com/MiniMax-AI/cli) + MiniMax Token Plan |
+- **Phase 0** — scaffolding ✅
+- **Phase 1** — CLI core (current) ⏳
+- **Phase 2** — move mmx plugin into monorepo
+- **Phase 3** — install flow
+- **Phase 4** — uninstall / status / update
+- **Phase 5** — auto-discovery
+- **Phase 6** — publish
+- **Phase 7** — CI
 
-## Commands
-
-- `npx hl-plugins install [plugin]` — install plugin(s) into your OpenCode
-- `npx hl-plugins uninstall [plugin]` — remove plugin(s)
-- `npx hl-plugins list` — show available and installed plugins
-- `npx hl-plugins status` — diagnose state per plugin
-- `npx hl-plugins update [plugin]` — refresh plugin files
-- `npx hl-plugins help` — show all commands
-
-## Adding a new plugin
-
-See [docs/adding-a-plugin.md](docs/adding-a-plugin.md).
-
-## Documentation
-
-- [docs/plan.md](docs/plan.md) — why this repo exists
-- [docs/architecture.md](docs/architecture.md) — how it works
-- [docs/commands.md](docs/commands.md) — CLI reference
-- [docs/adding-a-plugin.md](docs/adding-a-plugin.md) — tutorial for new plugins
-
-## License
-
-MIT
+See `docs/plan.md` for the full roadmap.

@@ -13,8 +13,15 @@ MiniMax / `mmx-cli`).
 
 - **GitHub:** `git@github-zen0space:hmanlab/hl-plugins.git`
 - **Branch:** `main`
-- **Last commit:** see `git log -1` (currently `5c9d00f` — docs + scaffolding only)
-- **Phase:** 0 of 7 (see `docs/plan.md` for the implementation roadmap)
+- **Phase:** 4 of 7 (see `docs/plan.md` for the implementation roadmap)
+  - Phase 0 — scaffolding ✅
+  - Phase 1 — CLI core ✅
+  - Phase 2 — mmx moved into `packages/plugin-mmx/` ✅
+  - Phase 3 — install flow ✅
+  - Phase 4 — uninstall / status / update ✅
+  - Phase 5 — plugin registry auto-discovery ⏳
+  - Phase 6 — publish ⏳
+  - Phase 7 — CI ⏳
 
 ## Brand and naming
 
@@ -77,11 +84,14 @@ no CLI changes required.
 # from the monorepo root
 npm install
 node packages/cli/bin/hl-plugins.js help
-
-# after the CLI is built
-npx hl-plugins install mmx
-npx hl-plugins status
-npx hl-plugins uninstall mmx
+node packages/cli/bin/hl-plugins.js list
+node packages/cli/bin/hl-plugins.js install mmx       # full install flow
+node packages/cli/bin/hl-plugins.js install mmx --no-auth
+node packages/cli/bin/hl-plugins.js install mmx --key sk-xxxxx   # CI/automation
+node packages/cli/bin/hl-plugins.js install            # install all default plugins
+node packages/cli/bin/hl-plugins.js status mmx
+node packages/cli/bin/hl-plugins.js uninstall mmx [-y]
+node packages/cli/bin/hl-plugins.js update mmx
 ```
 
 ## Where to look
@@ -92,6 +102,7 @@ npx hl-plugins uninstall mmx
 | How does install work? | `docs/architecture.md` |
 | What commands will exist? | `docs/commands.md` |
 | How do I add a plugin? | `docs/adding-a-plugin.md` |
+| How is the CLI built? | `packages/cli/src/index.ts` + `packages/cli/bin/hl-plugins.js` |
 
 ## Known gotchas
 
@@ -102,20 +113,21 @@ npx hl-plugins uninstall mmx
 - **mmx-cli not in PATH:** install with `npm install -g mmx-cli`.
 - **OpenCode config merge:** the existing `~/.opencode/config.json` may
   have unrelated plugins/MCP — never overwrite, only add to arrays.
-- **mmx-tools.ts source of truth:** currently lives at
-  `~/.opencode/plugin/mmx-tools.ts`. Phase 2 will move it into
-  `packages/plugin-mmx/opencode/plugin/`. Don't duplicate.
+- **mmx-tools.ts source of truth:** lives at
+  `packages/plugin-mmx/opencode/plugin/mmx-tools.ts`. The install flow
+  copies it to `~/.opencode/plugin/mmx-tools.ts`. Don't duplicate the
+  source.
 
 ## Phases
 
 | # | Scope | Status |
 |---|---|---|
 | 0 | Docs + scaffolding | ✅ done |
-| 1 | `packages/cli/` skeleton | ⏳ next |
-| 2 | Move mmx plugin into `packages/plugin-mmx/` | ⏳ |
-| 3 | Install flow | ⏳ |
-| 4 | Symmetric ops (uninstall/status/update) | ⏳ |
-| 5 | Plugin registry auto-discovery | ⏳ |
+| 1 | `packages/cli/` skeleton (arg dispatch + help) | ✅ done |
+| 2 | Move mmx plugin into `packages/plugin-mmx/` | ✅ done |
+| 3 | Install flow (pre-flight → auth → copy → merge → verify) | ✅ done |
+| 4 | Symmetric ops (uninstall/status/update) | ✅ done |
+| 5 | Plugin registry auto-discovery | ⏳ next |
 | 6 | Publish to npm | ⏳ |
 | 7 | CI (GitHub Actions + Changesets) | ⏳ |
 

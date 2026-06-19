@@ -1,0 +1,24 @@
+{
+  "name": "hl-plugins-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Curated OpenCode plugins, installable with one command.",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node packages/cli/bin/hl-plugins.js",
+    "help": "node packages/cli/bin/hl-plugins.js help",
+    "typecheck": "tsc -p packages/cli/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.17.8",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.22.4",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

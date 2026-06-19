@@ -1,0 +1,32 @@
+{
+  "name": "@hl-plugins/mmx",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multimodal generation via MiniMax (image, video, music, speech, search, vision, quota).",
+  "type": "module",
+  "hl-plugins": {
+    "opencodePlugin": "./opencode/plugin/mmx-tools.ts",
+    "opencodeSkill": "./opencode/skill/mmx/SKILL.md",
+    "defaultInstall": true,
+    "permission": "mmx *",
+    "requires": [
+      {
+        "name": "mmx-cli",
+        "type": "binary",
+        "check": "mmx --version",
+        "install": "npm install -g mmx-cli",
+        "update": "npm update -g mmx-cli"
+      }
+    ],
+    "auth": {
+      "check": "mmx auth status",
+      "login": "mmx auth login --api-key {key}",
+      "verify": "mmx quota",
+      "keyLabel": "MiniMax API key",
+      "envVar": "MMX_API_KEY"
+    },
+    "postInstall": [
+      "mmx quota"
+    ]
+  }
+}

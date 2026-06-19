@@ -1,17 +1,45 @@
+# ─── Node / npm ───────────────────────────────────────────────
 node_modules/
+*.tsbuildinfo
+.npm/
+
+# ─── Build output ─────────────────────────────────────────────
 dist/
 build/
-.DS_Store
+out/
+
+# ─── Logs ─────────────────────────────────────────────────────
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Environment / secrets ────────────────────────────────────
 .env
 .env.local
 .env.*.local
+
+# ─── Test / coverage ──────────────────────────────────────────
 coverage/
-*.tsbuildinfo
-.turbo/
-.next/
-.vercel/
+.nyc_output/
+
+# ─── Editor / OS ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
 .idea/
 .vscode/
 *.swp
 *.swo
+*.bak
+*~
+
+# ─── Caches ───────────────────────────────────────────────────
+.cache/
+.parcel-cache/
+.turbo/
+.next/
+.vercel/
+
+# ─── npm pack output ──────────────────────────────────────────
+*.tgz
