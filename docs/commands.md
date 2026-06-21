@@ -1,6 +1,11 @@
 # Command reference
 
-## `npx /hl-plugins install [plugin]`
+> Assumes the CLI is installed globally with
+> `npm install -g @hmanlab/hl-plugins`. All commands also accept the
+> `npx -y @hmanlab/hl-plugins <cmd>` form for one-shot usage without a
+> global install.
+
+## `hl-plugins install [plugin]`
 
 Install one or more plugins into the user's OpenCode config.
 
@@ -21,9 +26,9 @@ Install one or more plugins into the user's OpenCode config.
 **Examples**
 
 ```bash
-npx /hl-plugins install
-npx /hl-plugins install mmx
-npx /hl-plugins install mmx --no-auth      # skip auth prompt (use existing session)
+hl-plugins install
+hl-plugins install mmx
+hl-plugins install mmx --no-auth      # skip auth prompt (use existing session)
 ```
 
 **Exit codes**
@@ -34,7 +39,7 @@ npx /hl-plugins install mmx --no-auth      # skip auth prompt (use existing sess
 
 ---
 
-## `npx /hl-plugins uninstall [plugin]`
+## `hl-plugins uninstall [plugin]`
 
 Remove plugin files and config entries. Does **not** uninstall the plugin's dependencies (e.g. `mmx-cli` stays installed and authenticated).
 
@@ -47,18 +52,18 @@ Remove plugin files and config entries. Does **not** uninstall the plugin's depe
 **Examples**
 
 ```bash
-npx /hl-plugins uninstall
-npx /hl-plugins uninstall mmx
+hl-plugins uninstall
+hl-plugins uninstall mmx
 ```
 
 ---
 
-## `npx /hl-plugins list`
+## `hl-plugins list`
 
 Show all known plugins and their install state.
 
 ```
-$ npx /hl-plugins list
+$ hl-plugins list
 
 PLUGIN   INSTALLED   VERSION   DESCRIPTION
 mmx      ✓           0.1.0     Multimodal generation via MiniMax
@@ -66,12 +71,12 @@ mmx      ✓           0.1.0     Multimodal generation via MiniMax
 
 ---
 
-## `npx /hl-plugins status`
+## `hl-plugins status`
 
 Per-plugin diagnostic report.
 
 ```
-$ npx /hl-plugins status mmx
+$ hl-plugins status mmx
 
 Plugin file:    ~/.opencode/plugin/mmx-tools.ts     ✓ present
 Skill file:     ~/.opencode/skill/mmx/SKILL.md     ✓ present
@@ -83,19 +88,19 @@ Quota:          5h: 87% remaining / 7d: 64% remaining
 
 ---
 
-## `npx /hl-plugins update [plugin]`
+## `hl-plugins update [plugin]`
 
 Re-copy plugin + skill files, upgrade the plugin's required binaries (e.g. `npm update -g mmx-cli`).
 
 **Examples**
 
 ```bash
-npx /hl-plugins update           # update all
-npx /hl-plugins update mmx       # update one
+hl-plugins update           # update all
+hl-plugins update mmx       # update one
 ```
 
 ---
 
-## `npx /hl-plugins help`
+## `hl-plugins help`
 
 Show all commands and a short description of each.

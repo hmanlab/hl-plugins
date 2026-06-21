@@ -1,0 +1,15 @@
+{
+  "name": "@hl-plugins/multiplayer",
+  "version": "0.3.1",
+  "private": true,
+  "description": "Real-time multiplayer for OpenCode. Two or more developers collaborate in the same session. Phase 03: companion pane auto-spawns (tmux / iTerm2 / detached terminal); chat roundtrip; typing indicator.",
+  "type": "module",
+  "scripts": {
+    "prepublishOnly": "bun build ./opencode/plugin/multiplayer-tools.ts --outfile=dist/multiplayer-tools.js --target=bun --external @opencode-ai/plugin"
+  },
+  "hl-plugins": {
+    "opencodePlugin": "./dist/multiplayer-tools.js",
+    "opencodeSkill": "./opencode/skill/multiplayer/SKILL.md",
+    "defaultInstall": true
+  }
+}

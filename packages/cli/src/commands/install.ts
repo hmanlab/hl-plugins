@@ -56,10 +56,7 @@ async function ensureRequirement(req: PluginRequirement): Promise<string> {
   // Re-check
   const verify = await tryRun(req.check)
   if (!verify || verify.code !== 0) {
-    throw new Error(
-      `Installed ${req.name} but "${req.check}" still fails. ` +
-        `Make sure it's on your PATH.`,
-    )
+    throw new Error(`Installed ${req.name} but "${req.check}" still fails. ` + `Make sure it's on your PATH.`)
   }
   return "installed"
 }
@@ -82,9 +79,10 @@ async function authenticate(plugin: PluginManifest, opts: InstallOpts): Promise<
   if (!key) throw new Error(`No ${auth.keyLabel} provided.`)
 
   const login = auth.login
-  const loginRes = typeof login === "string"
-    ? await run(fillTemplate(login, { key }), { throwOnError: false })
-    : await runArgv(login.cmd, login.args, { key }, { throwOnError: false })
+  const loginRes =
+    typeof login === "string"
+      ? await run(fillTemplate(login, { key }), { throwOnError: false })
+      : await runArgv(login.cmd, login.args, { key }, { throwOnError: false })
   if (loginRes.code !== 0) {
     throw new Error(
       `Login failed (exit ${loginRes.code}).\n` +
@@ -94,7 +92,10 @@ async function authenticate(plugin: PluginManifest, opts: InstallOpts): Promise<
 
   // Smoke test + region auto-retry
   const regions = ["global", "cn"] as const
-  for (const attempt of [auth.verify, ...regions.map((r) => `mmx config set --key region --value ${r} && ${auth.verify}`)]) {
+  for (const attempt of [
+    auth.verify,
+    ...regions.map((r) => `mmx config set --key region --value ${r} && ${auth.verify}`),
+  ]) {
     const res = await run(attempt, { throwOnError: false })
     if (res.code === 0) {
       return attempt === auth.verify ? "authenticated" : "authenticated (region auto-retry succeeded)"
@@ -175,10 +176,7 @@ async function verify(plugin: PluginManifest): Promise<string[]> {
     const res = await run(cmd, { throwOnError: false })
     const text = (res.stdout || res.stderr).trim()
     if (res.code !== 0) {
-      throw new Error(
-        `Verification failed: ${cmd}\n` +
-          `  ${text || "(no output)"}`,
-      )
+      throw new Error(`Verification failed: ${cmd}\n` + `  ${text || "(no output)"}`)
     }
     out.push(text.split("\n")[0] || cmd)
   }
@@ -193,7 +191,12 @@ type InstallOpts = {
   verbose: boolean
 }
 
-async function installOne(plugin: PluginManifest, opts: InstallOpts, step: number, total: number): Promise<void> {
+async function installOne(
+  plugin: PluginManifest,
+  opts: InstallOpts,
+  step: number,
+  total: number,
+): Promise<void> {
   ui.info(ui.bold(`\n[${step}/${total}] ${plugin.name} -- ${plugin.description}`))
 
   await ui.spinner("Pre-flight checks", async () => {
@@ -207,9 +210,7 @@ async function installOne(plugin: PluginManifest, opts: InstallOpts, step: numbe
 
   const auth = plugin.contract.auth
   if (auth) {
-    const note = await ui.spinner(`Authenticate: ${auth.keyLabel}`, () =>
-      authenticate(plugin, opts),
-    )
+    const note = await ui.spinner(`Authenticate: ${auth.keyLabel}`, () => authenticate(plugin, opts))
     if (note) ui.info(`    ${ui.dim(note)}`)
   }
 
@@ -244,13 +245,17 @@ function parseArgs(args: string[]): InstallOpts & { names: string[] } {
       names.push(a)
     }
   }
-  return { names, skipAuth, key, verbose: args.includes("--verbose") || args.includes("-v") || process.env["HL_PLUGINS_DEBUG"] === "1" }
+  return {
+    names,
+    skipAuth,
+    key,
+    verbose: args.includes("--verbose") || args.includes("-v") || process.env["HL_PLUGINS_DEBUG"] === "1",
+  }
 }
 
 export async function install(args: string[]): Promise<number> {
   const opts = parseArgs(args)
-  const targets =
-    opts.names.length > 0 ? opts.names.map((n) => getPlugin(n)) : defaultInstallPlugins()
+  const targets = opts.names.length > 0 ? opts.names.map((n) => getPlugin(n)) : defaultInstallPlugins()
   if (targets.length === 0) {
     ui.warn("No plugins to install (none marked defaultInstall in this monorepo).")
     return 0

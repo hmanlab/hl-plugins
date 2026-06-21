@@ -1,0 +1,341 @@
+import type { HostSocketData, PeerInfo } from "../types.ts"
+import type { StateStore } from "../persistence/index.ts"
+import type { Toaster } from "../bridge/index.ts"
+import type { Logger } from "../bridge/index.ts"
+import type { HostServerHandlers } from "../server/index.ts"
+import { startHostServer } from "../server/index.ts"
+import { mintCode, parseCode, assignCollisionSuffix, isValidCode } from "../handle/index.ts"
+import { peerListForBroadcast } from "./peer-helpers.ts"
+import type { RoleState } from "./role-state.ts"
+
+export class HostRole implements RoleState {
+  readonly kind = "host" as const
+
+  private server: ReturnType<typeof Bun.serve> | null = null
+  private code: string | null = null
+  private handle: string
+  private peers = new Map<Bun.ServerWebSocket<HostSocketData>, PeerInfo>()
+  private volunteers = new Set<string>()
+  private graceCodes: Set<string> = new Set()
+
+  constructor(
+    private opts: {
+      port: number
+      host: string
+      handle: string
+      state: StateStore
+      toaster: Toaster
+      logger: Logger
+      onPeersChanged?: (peers: { handle: string; joinedAt: number }[]) => void
+      onChatReceived?: (msg: { from: string; text: string; ts: number }) => void
+      onTypingReceived?: (from: string, state: "start" | "stop") => void
+    },
+  ) {
+    this.handle = opts.handle
+  }
+
+  getCode(): string | null {
+    return this.code
+  }
+
+  getHandle(): string | null {
+    return this.handle
+  }
+
+  getPeers(): Map<Bun.ServerWebSocket<HostSocketData>, PeerInfo> {
+    return this.peers
+  }
+
+  acceptVolunteer(handle: string): void {
+    this.volunteers.add(handle)
+  }
+
+  isVolunteer(handle: string): boolean {
+    return this.volunteers.has(handle)
+  }
+
+  private takenHandles(): string[] {
+    const out: string[] = []
+    if (this.handle) out.push(this.handle)
+    for (const p of this.peers.values()) {
+      if (p.handle !== "__pending__") out.push(p.handle)
+    }
+    return out
+  }
+
+  broadcast(
+    msg: { type: string; [key: string]: unknown },
+    except?: Bun.ServerWebSocket<HostSocketData>,
+  ): void {
+    for (const ws of this.peers.keys()) {
+      if (except && ws === except) continue
+      try {
+        ws.send(JSON.stringify(msg))
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  sendChat(text: string): { ok: true; ts: number; peers: number } | { ok: false; reason: string } {
+    const trimmed = text.trim()
+    if (trimmed.length === 0) return { ok: false, reason: "empty" }
+    if (trimmed.length > 4000) return { ok: false, reason: "too_long" }
+    if (!this.server) return { ok: false, reason: "not_hosting" }
+    const ts = Date.now()
+    const msg = { type: "chat", from: this.handle, text: trimmed, ts }
+    this.broadcast(msg)
+    return { ok: true, ts, peers: this.peers.size }
+  }
+
+  sendTyping(state: "start" | "stop"): void {
+    if (!this.server) return
+    const msg = { type: "typing", from: this.handle, state }
+    this.broadcast(msg)
+  }
+
+  private broadcastPeersUpdate(): void {
+    const peers = peerListForBroadcast(this.peers)
+    this.broadcast({ type: "peers_update", peers })
+    this.opts.onPeersChanged?.(peers)
+  }
+
+  private findPeerWs(handle: string): Bun.ServerWebSocket<HostSocketData> | null {
+    for (const [ws, peer] of this.peers.entries()) {
+      if (peer.handle === handle) return ws
+    }
+    return null
+  }
+
+  findPeerByHandle(handle: string): Bun.ServerWebSocket<HostSocketData> | null {
+    return this.findPeerWs(handle)
+  }
+
+  private sendToPeer(
+    ws: { send(data: string): unknown },
+    msg: { type: string; [key: string]: unknown },
+  ): void {
+    try {
+      ws.send(JSON.stringify(msg))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private async onPeerClose(ws: Bun.ServerWebSocket<HostSocketData>): Promise<void> {
+    if (ws.data.state === "authenticated") {
+      const peer = ws.data.peer
+      this.peers.delete(ws)
+      if (peer.handle !== "__pending__") {
+        this.volunteers.delete(peer.handle)
+        await this.opts.logger.log("info", "peer disconnected", { handle: peer.handle })
+        await this.opts.toaster.show(`peer disconnected (${peer.handle})`, "warning", "multiplayer")
+        this.broadcastPeersUpdate()
+      }
+    }
+  }
+
+  private async onMessage(ws: Bun.ServerWebSocket<HostSocketData>, raw: string | Buffer): Promise<void> {
+    const text = typeof raw === "string" ? raw : raw.toString("utf8")
+    let msg: { type: string; [key: string]: unknown }
+    try {
+      msg = JSON.parse(text) as { type: string; [key: string]: unknown }
+    } catch {
+      this.sendToPeer(ws, { type: "auth_fail", reason: "invalid_json" })
+      this.sendToPeer(ws, { type: "bye" })
+      try {
+        ws.close()
+      } catch {
+        /* ignore */
+      }
+      return
+    }
+
+    if (ws.data.state === "awaiting_auth") {
+      if (msg.type !== "auth") {
+        this.sendToPeer(ws, { type: "auth_fail", reason: "expected_auth" })
+        this.sendToPeer(ws, { type: "bye" })
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
+        return
+      }
+      const code = msg.code as string
+      if (!isValidCode(code)) {
+        this.sendToPeer(ws, { type: "auth_fail", reason: "invalid_code" })
+        this.sendToPeer(ws, { type: "bye" })
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
+        await this.opts.toaster.show("guest sent an invalid code", "warning", "multiplayer")
+        return
+      }
+      const normalized = code.toLowerCase()
+      const isCurrent = this.code !== null && normalized === this.code
+      const isGrace = !isCurrent && this.graceCodes.has(normalized)
+      if (!isCurrent && !isGrace) {
+        this.sendToPeer(ws, { type: "auth_fail", reason: "unknown_code" })
+        this.sendToPeer(ws, { type: "bye" })
+        try {
+          ws.close()
+        } catch {
+          /* ignore */
+        }
+        return
+      }
+      const peer: PeerInfo = { handle: "__pending__", joinedAt: Date.now(), isVolunteer: false }
+      ws.data = { state: "authenticated", peer }
+      this.peers.set(ws, peer)
+      this.sendToPeer(ws, { type: "auth_ok", handle: this.handle ?? "host" })
+      this.sendToPeer(ws, {
+        type: "welcome",
+        handle: this.handle ?? "host",
+        peers: peerListForBroadcast(this.peers),
+      })
+      return
+    }
+
+    // authenticated
+    if (msg.type === "hello") {
+      const requested = ((msg.handle as string) ?? "")
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "")
+        .slice(0, 16)
+      const peer = ws.data.peer
+      const existing = this.takenHandles()
+      let assigned = requested
+      if (existing.includes(assigned)) {
+        assigned = assignCollisionSuffix(requested, existing)
+      }
+      peer.handle = assigned
+      await this.opts.logger.log("info", "peer connected", { guestHandle: assigned })
+      await this.opts.toaster.show(`✓ peer connected (${assigned})`, "success", "multiplayer")
+      this.broadcastPeersUpdate()
+      return
+    }
+
+    if (msg.type === "volunteer") {
+      const peer = ws.data.peer
+      if (peer.handle === "__pending__") return
+      peer.isVolunteer = true
+      this.volunteers.add(peer.handle)
+      await this.opts.logger.log("info", "peer volunteered", { handle: peer.handle })
+      await this.opts.toaster.show(`volunteer accepted (${peer.handle})`, "info", "multiplayer")
+      return
+    }
+
+    if (msg.type === "bye") {
+      return
+    }
+
+    if (msg.type === "chat") {
+      const peer = ws.data.peer
+      if (peer.handle === "__pending__") return
+      const m = msg as unknown as { text?: unknown; ts?: unknown }
+      const text = typeof m.text === "string" ? m.text : ""
+      if (text.length === 0 || text.length > 4000) return
+      const ts = typeof m.ts === "number" ? m.ts : Date.now()
+      const out = { type: "chat", from: peer.handle, text, ts }
+      this.broadcast(out, ws)
+      this.opts.onChatReceived?.({ from: peer.handle, text, ts })
+      await this.opts.logger.log("debug", "host: chat fan-out", {
+        from: peer.handle,
+        peers: this.peers.size - 1,
+      })
+      return
+    }
+
+    if (msg.type === "typing") {
+      const peer = ws.data.peer
+      if (peer.handle === "__pending__") return
+      const state = (msg as unknown as { state?: unknown }).state === "stop" ? "stop" : "start"
+      const out = { type: "typing", from: peer.handle, state }
+      this.broadcast(out, ws)
+      this.opts.onTypingReceived?.(peer.handle, state)
+      return
+    }
+
+    await this.opts.logger.log("warn", "host: unexpected message", { msg, state: ws.data.state })
+  }
+
+  addGraceCode(code: string): void {
+    this.graceCodes.add(code.toLowerCase())
+  }
+
+  hasGraceCode(code: string): boolean {
+    return this.graceCodes.has(code.toLowerCase())
+  }
+
+  async start(): Promise<{ ok: true; code: string; url: string } | { ok: false; reason: string }> {
+    this.code = mintCode(this.handle)
+    const code = this.code
+    const url = `ws://${this.opts.host}:${this.opts.port}`
+
+    // Load grace codes from state.json (codes from previous host
+    // changes that are still within their 1-hour window).
+    try {
+      const state = this.opts.state.prune(await this.opts.state.read())
+      for (const g of state.graceCodes) {
+        this.graceCodes.add(g.code)
+      }
+    } catch {
+      /* best-effort */
+    }
+
+    const handlers: HostServerHandlers = {
+      onMessage: (ws, raw) => {
+        void this.onMessage(ws, raw)
+      },
+      onClose: (ws) => {
+        void this.onPeerClose(ws)
+      },
+    }
+
+    const result = await startHostServer({ port: this.opts.port, host: this.opts.host, handlers })
+    if (!result.ok) {
+      this.code = null
+      this.handle = ""
+      if (result.reason.startsWith("port_")) {
+        await this.opts.logger.log("warn", "host start failed: port in use", { port: this.opts.port })
+      } else {
+        await this.opts.logger.log("error", "host start failed", { error: result.reason })
+      }
+      return { ok: false, reason: result.reason }
+    }
+
+    this.server = result.server
+    await this.opts.state.recordHostStarted(this.handle, code)
+    await this.opts.logger.log("info", "host started", {
+      handle: this.handle,
+      port: this.opts.port,
+      code,
+      url,
+    })
+    await this.opts.toaster.show(`invite: ${code}`, "success", "multiplayer")
+    await this.opts.toaster.show(`hosting on ${url}`, "info", "multiplayer")
+    return { ok: true, code, url }
+  }
+
+  stop(): void {
+    if (this.server) {
+      try {
+        this.server.stop(true)
+      } catch {
+        /* ignore */
+      }
+      this.server = null
+    }
+    this.code = null
+    this.handle = ""
+    this.peers = new Map()
+    this.volunteers = new Set()
+  }
+
+  dispose(): void {
+    this.stop()
+  }
+}

@@ -135,4 +135,4 @@ The `install` command without args installs every plugin with `defaultInstall: t
 }
 ```
 
-Users then install explicitly: `npx /hl-plugins install <name>`.
+Users then install explicitly: `hl-plugins install <name>` (after `npm install -g @hmanlab/hl-plugins`).

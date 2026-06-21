@@ -50,7 +50,7 @@ hl-plugins/
 
 ## Install flow
 
-When a user runs `npx /hl-plugins install mmx`:
+When a user runs `hl-plugins install mmx` (after `npm install -g @hmanlab/hl-plugins`):
 
 ```
 [1] Resolve plugin
@@ -72,8 +72,8 @@ When a user runs `npx /hl-plugins install mmx`:
     - if 401, set region: `mmx config set --key region --value global` or `cn`
     ↓
 [4] Copy files
-    - src:  packages/plugin-mmx/opencode/plugin/mmx-tools.ts
-      dest: ~/.opencode/plugin/mmx-tools.ts
+    - src:  packages/plugin-mmx/dist/mmx-tools.js  (bundled entry)
+      dest: ~/.opencode/plugin/mmx-tools.js
     - src:  packages/plugin-mmx/opencode/skill/mmx/SKILL.md
       dest: ~/.opencode/skill/mmx/SKILL.md
     - create dirs as needed
@@ -104,8 +104,9 @@ Every `packages/plugin-*/package.json` must declare an `hl-plugins` field:
   "description": "Multimodal generation via MiniMax",
   "private": true,
   "hl-plugins": {
-    // Path to the OpenCode plugin file (relative to this package.json)
-    "opencodePlugin": "./opencode/plugin/mmx-tools.ts",
+    // Path to the OpenCode plugin file (relative to this package.json).
+    // For plugins with internal src/ structure, this points to a bundled .js:
+    "opencodePlugin": "./dist/mmx-tools.js",
 
     // Path to the OpenCode skill file (optional)
     "opencodeSkill": "./opencode/skill/mmx/SKILL.md",
@@ -143,7 +144,7 @@ The CLI auto-discovers any `packages/plugin-*/package.json` that has an `hl-plug
 ```
 +-------------------------+
 |     User terminal       |
-|  $ npx /hl-plugins ...   |
+|  $ hl-plugins ...                    |
 +-----------+-------------+
             |
             v
@@ -185,7 +186,7 @@ The CLI auto-discovers any `packages/plugin-*/package.json` that has an `hl-plug
 
 | Decision | Why |
 |---|---|
-| **No build step for plugins** | OpenCode runs `.ts` directly via Bun. Keeps iteration fast. |
+| **Single-file bundle for plugins** | Plugins with internal `src/` structure (e.g. multiplayer) use `bun build --target=bun` to produce a single `.js` entry point. Dev/test use the `.ts` source directly; publish uses the bundle. |
 | **TypeScript for both CLI and plugin** | Shared types, single mental model, better DX. |
 | **Additive config merge only** | Never destroys the user's other plugins, MCP servers, or skills. |
 | **Symmetric install/uninstall** | Both operate on the same manifest — uninstall can't drift from install. |

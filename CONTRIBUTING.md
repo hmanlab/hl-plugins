@@ -31,7 +31,6 @@ For security issues, **do not** file a public issue — see [SECURITY.md](SECURI
 > **Tip:** mention `@hmanlab` in the issue body to have a triage bot
 > analyze the repo and reply with a possible root cause + fix before a
 > maintainer sees it. See [docs/notes/agent-triage.md](docs/notes/agent-triage.md).
-
 ## Claiming an issue
 
 We use a **claim before you code** model to avoid wasted work and
