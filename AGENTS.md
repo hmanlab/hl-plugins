@@ -20,19 +20,35 @@
 
 ## Triage bot
 
-- `.github/workflows/hmanlab-triage.yml` runs on every **new** issue
-  whose body or title contains `@hmanlab`.
+- `.github/workflows/hmanlab-triage.yml` runs on `issues: opened` AND on
+  any `issue_comment: created` whose body contains `@hmanlab`.
 - It calls `scripts/triage/issue-triage.ts` (via `tsx`), which uses the
   `openai` SDK as a transport and posts the result as a comment.
+- Three intents are recognized:
+  - **`@hmanlab`** (in issue body, issue title, or any comment) —
+    re-runs the standard issue-triage analysis using the full thread.
+  - **`@hmanlab claim: <proposal>`** (in a comment) — runs a
+    claim-review pass that posts a verdict (looks good / has concerns
+    / doesn't fit) and applies a `triage/claim-*` label. The bot does
+    NOT assign anyone — the maintainer reviews the verdict and
+    assigns via the UI.
+  - No mention — workflow skips (no Actions run).
 - Provider is **swappable at runtime** via two repo variables:
   `OPENAI_BASE_URL` (default `https://api.minimax.io/v1`) and
   `OPENAI_MODEL` (default `MiniMax-M3`). GLM, Kimi, DeepSeek, OpenAI,
   OpenRouter all work — same protocol, just set the two vars.
 - Requires the `LLM_API_KEY` repo secret.
-- The comment body follows the AGENTS.md issue template (Summary, Repro,
-  Root cause, Impact, Proposed fix, Behavior after, Alternatives,
-  Affected files, Version). Don't change the format — it's the
-  maintainer's skim contract.
+- The triage comment follows the AGENTS.md issue template (Summary,
+  Repro, Root cause, Impact, Proposed fix, Behavior after,
+  Alternatives, Affected files, Version). The claim-review comment
+  uses the structured verdict format in
+  `docs/notes/agent-triage.md`. Don't change the formats — they're
+  the maintainer's skim contract.
+- **No-code rule:** the bot's replies must contain no fenced code
+  blocks, no diffs, and no inline backticks around code identifiers.
+  It describes changes in prose; the human writes the code. The
+  script enforces this in the system prompt + a post-processing pass
+  that strips any `` ``` `` blocks the model slips into its reply.
 - Full setup, provider recipes, and disable instructions:
   `docs/notes/agent-triage.md`.
 
@@ -56,7 +72,7 @@ Recommended issue template (used for the `mmx_image` filename-collision bug):
 2. **Repro / Steps to reproduce** — minimal code or commands that trigger the bug
 3. **Root cause** — file path + line number + the offending snippet, plus why it matters
 4. **Impact** — who hits this, what state/data is affected
-5. **Proposed fix** — concrete code change (the actual diff, not a hand-wave)
+5. **Proposed fix** — concrete description of the change (no code or diffs — the human will write it)
 6. **Behavior after the fix** — before/after table for the affected scenarios
 7. **Alternatives considered** — what else was on the table and why this won
 8. **Affected files** — exact paths to change
