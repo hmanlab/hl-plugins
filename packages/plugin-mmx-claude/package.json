@@ -1,0 +1,49 @@
+{
+  "name": "@hl-plugins/mmx-claude",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code MCP adapter for the seven MiniMax multimodal tools. Companion to @hl-plugins/mmx (OpenCode).",
+  "type": "module",
+  "scripts": {
+    "build": "bun build ./claude/mcp/mmx-mcp-server.ts --target=bun --outfile=./dist/mmx-mcp-server.js",
+    "clean": "rm -rf dist"
+  },
+  "hl-plugins": {
+    "defaultInstall": false,
+    "claudeMcp": "./dist/mmx-mcp-server.js",
+    "claudeSkill": "./claude/skill/mmx/SKILL.md",
+    "requires": [
+      {
+        "name": "mmx-cli",
+        "type": "binary",
+        "check": "mmx --version",
+        "install": "npm install -g mmx-cli",
+        "update": "npm update -g mmx-cli"
+      },
+      {
+        "name": "bun",
+        "type": "binary",
+        "check": "bun --version",
+        "install": "curl -fsSL https://bun.sh/install | bash"
+      }
+    ],
+    "auth": {
+      "check": "mmx auth status",
+      "login": {
+        "cmd": "mmx auth login",
+        "args": [
+          "--api-key",
+          {
+            "var": "key"
+          }
+        ]
+      },
+      "verify": "mmx quota",
+      "keyLabel": "MiniMax API key",
+      "envVar": "MMX_API_KEY"
+    },
+    "postInstall": [
+      "mmx quota"
+    ]
+  }
+}
