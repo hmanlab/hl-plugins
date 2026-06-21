@@ -161,9 +161,7 @@ export function getPlugin(name: string): PluginManifest {
     const hint = inMonorepo
       ? `\nIf you're using the published CLI, run \`npm install -g @hmanlab/${name}\` first.`
       : `\nIf you're using the published CLI, run \`npm install -g @hmanlab/${name}\` first.`
-    throw new Error(
-      `Unknown plugin: "${name}".\n` + `Known plugins: ${known || "(none discovered)"}.` + hint,
-    )
+    throw new Error(`Unknown plugin: "${name}".\n` + `Known plugins: ${known || "(none discovered)"}.` + hint)
   }
   return match
 }

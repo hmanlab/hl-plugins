@@ -302,7 +302,10 @@ function parseArgs(args: string[]): InstallOpts & { names: string[] } {
 
 export async function install(args: string[]): Promise<number> {
   const opts = parseArgs(args)
-  const targets = opts.names.length > 0 ? await Promise.all(opts.names.map((n) => ensurePluginAvailable(n))) : defaultInstallPlugins()
+  const targets =
+    opts.names.length > 0
+      ? await Promise.all(opts.names.map((n) => ensurePluginAvailable(n)))
+      : defaultInstallPlugins()
   if (targets.length === 0) {
     ui.warn("No plugins to install (none marked defaultInstall in this monorepo).")
     return 0
