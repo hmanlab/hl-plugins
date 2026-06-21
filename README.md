@@ -3,6 +3,7 @@
 A monorepo of curated OpenCode plugins, installable with a single command.
 
 [![CI](https://github.com/hmanlab/hl-plugins/actions/workflows/ci.yml/badge.svg)](https://github.com/hmanlab/hl-plugins/actions/workflows/ci.yml)
+[![Triage bot](https://github.com/hmanlab/hl-plugins/actions/workflows/hmanlab-triage.yml/badge.svg)](https://github.com/hmanlab/hl-plugins/actions/workflows/hmanlab-triage.yml)
 
 ## Install
 
