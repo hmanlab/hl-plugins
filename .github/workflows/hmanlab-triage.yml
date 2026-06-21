@@ -3,13 +3,22 @@ name: hmanlab Triage
 on:
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
 
 jobs:
   triage:
     if: |
-      (contains(github.event.issue.title, '@hmanlab') ||
-       contains(github.event.issue.body, '@hmanlab')) &&
-      github.event.issue.user.login != 'github-actions[bot]'
+      github.event.issue.pull_request == null &&
+      (
+        (github.event_name == 'issues' &&
+          (contains(github.event.issue.title, '@hmanlab') || contains(github.event.issue.body, '@hmanlab')) &&
+          github.event.issue.user.login != 'github-actions[bot]')
+        ||
+        (github.event_name == 'issue_comment' &&
+          contains(github.event.comment.body, '@hmanlab') &&
+          github.event.comment.user.login != 'github-actions[bot]')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,8 +38,11 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'MiniMax-M3' }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || 'https://api.minimax.io/v1' }}
+          EVENT_NAME: ${{ github.event_name }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           REPO: ${{ github.repository }}
         run: npx tsx scripts/triage/issue-triage.ts

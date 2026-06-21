@@ -42,9 +42,18 @@ duplicate PRs.
    1. ...
    2. ...
    ```
-2. Wait for a maintainer to assign it to you. We typically respond within a few days.
-3. Once assigned, the issue is yours. If you can't finish it, comment and we'll unassign.
-4. **Don't start work on something you didn't claim.** Unclaimed PRs may be closed without review.
+2. (Optional) Ask the triage bot to review your plan before a
+   maintainer looks. Comment:
+   ```
+   @hmanlab claim: <your proposal>
+   ```
+   The bot will post a verdict (looks good / has concerns / doesn't
+   fit) and apply a `triage/claim-*` label. The bot does **not**
+   assign you — a maintainer still does that after reviewing the
+   verdict.
+3. Wait for a maintainer to assign it to you. We typically respond within a few days.
+4. Once assigned, the issue is yours. If you can't finish it, comment and we'll unassign.
+5. **Don't start work on something you didn't claim.** Unclaimed PRs may be closed without review.
 
 Open PRs without a corresponding claimed issue are reviewed on a
 best-effort basis.
