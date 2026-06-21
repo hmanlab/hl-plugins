@@ -10,13 +10,14 @@ const exec = promisify(execFile)
 const {
   GITHUB_TOKEN,
   LLM_API_KEY,
-  OPENAI_BASE_URL = "https://api.minimax.io/v1",
-  OPENAI_MODEL = "MiniMax-M3",
   ISSUE_NUMBER,
   ISSUE_TITLE = "",
   ISSUE_BODY = "",
   REPO = "",
 } = process.env
+
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.minimax.io/v1"
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "MiniMax-M3"
 
 const BOT_AUTHOR = "github-actions[bot]"
 const MENTION = "@hmanlab"
