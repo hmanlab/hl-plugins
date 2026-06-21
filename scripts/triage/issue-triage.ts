@@ -7,14 +7,7 @@ import { join, relative } from "node:path"
 
 const exec = promisify(execFile)
 
-const {
-  GITHUB_TOKEN,
-  LLM_API_KEY,
-  ISSUE_NUMBER,
-  ISSUE_TITLE = "",
-  ISSUE_BODY = "",
-  REPO = "",
-} = process.env
+const { GITHUB_TOKEN, LLM_API_KEY, ISSUE_NUMBER, ISSUE_TITLE = "", ISSUE_BODY = "", REPO = "" } = process.env
 
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.minimax.io/v1"
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "MiniMax-M3"
