@@ -1,9 +1,13 @@
 {
-  "name": "@hl-plugins/mmx-claude",
-  "version": "0.4.0",
-  "private": true,
+  "name": "@hmanlab/mmx-claude",
+  "version": "0.4.4",
   "description": "Claude Code MCP adapter for the seven MiniMax multimodal tools. Companion to @hl-plugins/mmx (OpenCode).",
   "type": "module",
+  "files": [
+    "claude",
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "bun build ./claude/mcp/mmx-mcp-server.ts --target=bun --outfile=./dist/mmx-mcp-server.js",
     "clean": "rm -rf dist"

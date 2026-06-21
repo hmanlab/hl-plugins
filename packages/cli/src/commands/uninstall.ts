@@ -4,7 +4,7 @@
 
 import { existsSync, readdirSync, rmSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
-import { discoverPlugins, getPlugin } from "../lib/registry.js"
+import { discoverPlugins, ensurePluginAvailable } from "../lib/registry.js"
 import { ui } from "../lib/ui.js"
 import {
   claudeSkillDir,
@@ -184,7 +184,7 @@ export async function uninstall(args: string[]): Promise<number> {
 
   for (const name of names) {
     try {
-      uninstallOne(getPlugin(name))
+      uninstallOne(await ensurePluginAvailable(name))
     } catch (err) {
       ui.error(`${name}: ${(err as Error).message}`)
       return 1

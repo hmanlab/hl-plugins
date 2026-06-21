@@ -1,9 +1,12 @@
 {
-  "name": "@hl-plugins/mmx",
-  "version": "0.4.0",
-  "private": true,
+  "name": "@hmanlab/mmx",
+  "version": "0.4.4",
   "description": "Multimodal generation via MiniMax (image, video, music, speech, search, vision, quota).",
   "type": "module",
+  "files": [
+    "opencode",
+    "README.md"
+  ],
   "hl-plugins": {
     "opencodePlugin": "./opencode/plugin/mmx-tools.ts",
     "opencodeSkill": "./opencode/skill/mmx/SKILL.md",

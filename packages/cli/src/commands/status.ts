@@ -3,7 +3,7 @@
 
 import { existsSync } from "node:fs"
 import { basename, join } from "node:path"
-import { discoverPlugins, getPlugin } from "../lib/registry.js"
+import { discoverPlugins, ensurePluginAvailable } from "../lib/registry.js"
 import { run, tryRun } from "../lib/shell.js"
 import { ui } from "../lib/ui.js"
 import {
@@ -141,7 +141,7 @@ function parseArgs(args: string[]): { names: string[] } {
 
 export async function status(args: string[]): Promise<number> {
   const { names } = parseArgs(args)
-  const targets = names.length > 0 ? names.map((n) => getPlugin(n)) : discoverPlugins()
+  const targets = names.length > 0 ? await Promise.all(names.map((n) => ensurePluginAvailable(n))) : discoverPlugins()
   if (targets.length === 0) {
     ui.info("No plugins discovered.")
     return 0

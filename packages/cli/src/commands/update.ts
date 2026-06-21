@@ -4,7 +4,7 @@
 
 import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
-import { discoverPlugins, defaultInstallPlugins, getPlugin } from "../lib/registry.js"
+import { discoverPlugins, defaultInstallPlugins, ensurePluginAvailable } from "../lib/registry.js"
 import { run } from "../lib/shell.js"
 import { ui } from "../lib/ui.js"
 import { opencodePluginDir, opencodeSkillDir, tilde } from "../lib/paths.js"
@@ -130,7 +130,7 @@ export async function update(args: string[]): Promise<number> {
     if (!p.contract.opencodePlugin) return false
     return existsSync(join(opencodePluginDir(), basename(p.contract.opencodePlugin)))
   })
-  const targets = names.length > 0 ? names.map((n) => getPlugin(n)) : installed
+  const targets = names.length > 0 ? await Promise.all(names.map((n) => ensurePluginAvailable(n))) : installed
   if (targets.length === 0) {
     ui.info("No plugins to update.")
     return 0
