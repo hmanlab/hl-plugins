@@ -6,8 +6,14 @@ import { existsSync, readdirSync, rmSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { discoverPlugins, getPlugin } from "../lib/registry.js"
 import { ui } from "../lib/ui.js"
-import { opencodePluginDir, opencodeSkillDir, tilde } from "../lib/paths.js"
-import { removeBashPermission, removePluginFromConfig } from "../lib/config.js"
+import {
+  claudeSkillDir,
+  hlPluginsDataPluginDir,
+  opencodePluginDir,
+  opencodeSkillDir,
+  tilde,
+} from "../lib/paths.js"
+import { removeBashPermission, removeMcpServer, removePluginFromConfig } from "../lib/config.js"
 import type { PluginManifest } from "../lib/registry.js"
 
 type UninstallOpts = { force: boolean; names: string[] }
@@ -23,13 +29,23 @@ function parseArgs(args: string[]): UninstallOpts {
   return { force, names }
 }
 
-/** Plugins whose plugin file currently exists in the install target. */
+/** Plugins with at least one install artifact present. */
 function installedPluginNames(): string[] {
   return discoverPlugins()
     .filter((p) => {
-      if (!p.contract.opencodePlugin) return false
-      const target = join(opencodePluginDir(), basename(p.contract.opencodePlugin))
-      return existsSync(target)
+      if (p.contract.opencodePlugin) {
+        const target = join(opencodePluginDir(), basename(p.contract.opencodePlugin))
+        if (existsSync(target)) return true
+      }
+      if (p.contract.claudeMcp) {
+        const target = join(hlPluginsDataPluginDir(p.name), basename(p.contract.claudeMcp))
+        if (existsSync(target)) return true
+      }
+      if (p.contract.claudeSkill) {
+        const target = join(claudeSkillDir(p.name), "SKILL.md")
+        if (existsSync(target)) return true
+      }
+      return false
     })
     .map((p) => p.name)
 }
@@ -37,7 +53,7 @@ function installedPluginNames(): string[] {
 function uninstallOne(plugin: PluginManifest): void {
   ui.info(ui.bold(`\n${plugin.name}`))
 
-  // 1. Remove plugin file
+  // 1. Remove OpenCode plugin file
   if (plugin.contract.opencodePlugin) {
     const dest = join(opencodePluginDir(), basename(plugin.contract.opencodePlugin))
     if (existsSync(dest)) {
@@ -48,7 +64,7 @@ function uninstallOne(plugin: PluginManifest): void {
     }
   }
 
-  // 2. Remove skill file (and its parent dir if empty)
+  // 2. Remove OpenCode skill file (and its parent dir if empty)
   if (plugin.contract.opencodeSkill) {
     const parts = plugin.contract.opencodeSkill.split("/")
     const skillIdx = parts.lastIndexOf("skill")
@@ -88,6 +104,56 @@ function uninstallOne(plugin: PluginManifest): void {
       ui.info(`  ${ui.ok(`removed bash.${plugin.contract.permission}`)}`)
     } else {
       ui.info(`  ${ui.dim(`· bash.${plugin.contract.permission} not set`)}`)
+    }
+  }
+
+  // 5. Remove the Claude MCP bundle
+  if (plugin.contract.claudeMcp) {
+    const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    if (existsSync(dest)) {
+      rmSync(dest)
+      ui.info(`  ${ui.ok("removed " + tilde(dest))}`)
+    } else {
+      ui.info(`  ${ui.dim("· mcp bundle not present: " + tilde(dest))}`)
+    }
+    // Try to remove the parent dir if it's now empty.
+    const parent = dirname(dest)
+    try {
+      if (existsSync(parent) && readdirSync(parent).length === 0) {
+        rmSync(parent, { recursive: true })
+        ui.info(`  ${ui.dim("· removed empty dir " + tilde(parent))}`)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 6. Remove the Claude skill file (and its parent dir if empty)
+  if (plugin.contract.claudeSkill) {
+    const dest = join(claudeSkillDir(plugin.name), "SKILL.md")
+    if (existsSync(dest)) {
+      rmSync(dest)
+      ui.info(`  ${ui.ok("removed " + tilde(dest))}`)
+    } else {
+      ui.info(`  ${ui.dim("· claude skill not present: " + tilde(dest))}`)
+    }
+    const parent = dirname(dest)
+    try {
+      if (existsSync(parent) && readdirSync(parent).length === 0) {
+        rmSync(parent, { recursive: true })
+        ui.info(`  ${ui.dim("· removed empty dir " + tilde(parent))}`)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 7. Remove the mcpServers entry
+  if (plugin.contract.claudeMcp) {
+    if (removeMcpServer(plugin.name)) {
+      ui.info(`  ${ui.ok(`removed mcpServers.${plugin.name}`)}`)
+    } else {
+      ui.info(`  ${ui.dim(`· mcpServers.${plugin.name} not present`)}`)
     }
   }
 }

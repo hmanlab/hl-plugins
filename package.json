@@ -14,7 +14,7 @@
     "build": "tsc -p packages/cli/tsconfig.json",
     "build:mmx-claude": "bun run --filter @hl-plugins/mmx-claude build",
     "clean": "rm -rf packages/cli/dist packages/plugin-mmx-claude/dist",
-    "test": "tsx --test packages/cli/test/lib/paths.test.ts",
+    "test": "tsx --test packages/cli/test/lib/paths.test.ts packages/cli/test/lib/claude-config.test.ts",
     "test:bun": "bun test packages/plugin-mmx-claude/test/",
     "format": "prettier --write \"**/*.{ts,json}\"",
     "format:check": "prettier --check \"**/*.{ts,json}\"",

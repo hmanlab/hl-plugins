@@ -6,15 +6,21 @@ import { basename, join } from "node:path"
 import { discoverPlugins, getPlugin } from "../lib/registry.js"
 import { run, tryRun } from "../lib/shell.js"
 import { ui } from "../lib/ui.js"
-import { opencodePluginDir, opencodeSkillDir, tilde } from "../lib/paths.js"
-import { readOpencodeConfig } from "../lib/config.js"
+import {
+  claudeSkillDir,
+  hlPluginsDataPluginDir,
+  opencodePluginDir,
+  opencodeSkillDir,
+  tilde,
+} from "../lib/paths.js"
+import { readClaudeConfig, readOpencodeConfig } from "../lib/config.js"
 import type { PluginManifest, PluginRequirement } from "../lib/registry.js"
 
-const LABEL_W = 16
+const LABEL_W = 22
 
 function row(label: string, value: string, ok: boolean | "info"): string {
   const pad = label.padEnd(LABEL_W)
-  const mark = ok === "info" ? ui.dim("Â·") : ok ? ui.green("✓") : ui.red("â")
+  const mark = ok === "info" ? ui.dim("·") : ok ? ui.green("✓") : ui.red("✗")
   return `  ${ui.dim(pad)} ${value}  ${mark}`
 }
 
@@ -45,35 +51,52 @@ function skillDest(contractPath: string): string | null {
 async function reportOne(plugin: PluginManifest): Promise<void> {
   ui.info(ui.bold(`\n${plugin.name} -- ${plugin.description || "(no description)"}`))
 
-  // Plugin file
+  // OpenCode install points
   if (plugin.contract.opencodePlugin) {
     const dest = join(opencodePluginDir(), basename(plugin.contract.opencodePlugin))
-    ui.info(row("Plugin file:", tilde(dest), existsSync(dest)))
+    ui.info(row("OpenCode plugin file:", tilde(dest), existsSync(dest)))
   }
-
-  // Skill file
   if (plugin.contract.opencodeSkill) {
     const dest = skillDest(plugin.contract.opencodeSkill)
     if (dest) {
-      ui.info(row("Skill file:", tilde(dest), existsSync(dest)))
+      ui.info(row("OpenCode skill file:", tilde(dest), existsSync(dest)))
     }
   }
+  if (plugin.contract.opencodePlugin || plugin.contract.permission) {
+    const cfg = readOpencodeConfig()
+    const pluginEntry = plugin.contract.opencodePlugin
+      ? `./plugin/${basename(plugin.contract.opencodePlugin)}`
+      : null
+    const pluginInCfg = pluginEntry ? (cfg.plugin ?? []).includes(pluginEntry) : true
+    const permInCfg = plugin.contract.permission
+      ? cfg.permission?.bash?.[plugin.contract.permission] === "allow"
+      : true
+    const configOk = pluginInCfg && permInCfg
+    const configDetail = configOk
+      ? `plugin[] + ${plugin.contract.permission ?? "(no perm)"}`
+      : [pluginInCfg ? null : "plugin[]", permInCfg ? null : "permission"].filter(Boolean).join(" + ") +
+        " missing"
+    ui.info(row("OpenCode config:", configDetail, configOk))
+  }
 
-  // Config merged: plugin[] entry + permission pattern
-  const cfg = readOpencodeConfig()
-  const pluginEntry = plugin.contract.opencodePlugin
-    ? `./plugin/${basename(plugin.contract.opencodePlugin)}`
-    : null
-  const pluginInCfg = pluginEntry ? (cfg.plugin ?? []).includes(pluginEntry) : true
-  const permInCfg = plugin.contract.permission
-    ? cfg.permission?.bash?.[plugin.contract.permission] === "allow"
-    : true
-  const configOk = pluginInCfg && permInCfg
-  const configDetail = configOk
-    ? `plugin[] + ${plugin.contract.permission ?? "(no perm)"}`
-    : [pluginInCfg ? null : "plugin[]", permInCfg ? null : "permission"].filter(Boolean).join(" + ") +
-      " missing"
-  ui.info(row("Config merged:", configDetail, configOk))
+  // Claude Code install points
+  if (plugin.contract.claudeMcp) {
+    const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    ui.info(row("Claude MCP bundle:", tilde(dest), existsSync(dest)))
+  }
+  if (plugin.contract.claudeSkill) {
+    const dest = join(claudeSkillDir(plugin.name), "SKILL.md")
+    ui.info(row("Claude skill file:", tilde(dest), existsSync(dest)))
+  }
+  if (plugin.contract.claudeMcp) {
+    const cfg = readClaudeConfig()
+    const mcpEntry = cfg.mcpServers?.[plugin.name]
+    const mcpOk = mcpEntry !== undefined
+    const detail = mcpOk
+      ? `mcpServers.${plugin.name} -> ${mcpEntry!.command} ${mcpEntry!.args.join(" ")}`
+      : `mcpServers.${plugin.name} missing`
+    ui.info(row("Claude mcpServers:", detail, mcpOk))
+  }
 
   // Requirements
   for (const req of plugin.contract.requires ?? []) {
@@ -123,7 +146,6 @@ export async function status(args: string[]): Promise<number> {
     ui.info("No plugins discovered.")
     return 0
   }
-  let allOk = true
   for (const plugin of targets) {
     await reportOne(plugin)
   }
