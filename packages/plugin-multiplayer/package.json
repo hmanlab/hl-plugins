@@ -1,6 +1,6 @@
 {
   "name": "@hmanlab/multiplayer",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Real-time multiplayer for OpenCode. Two or more developers collaborate in the same session. Phase 03: companion pane auto-spawns (tmux / iTerm2 / detached terminal); chat roundtrip; typing indicator.",
   "type": "module",
   "files": [
