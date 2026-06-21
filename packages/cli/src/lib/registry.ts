@@ -57,6 +57,10 @@ export type PluginManifest = {
   contract: {
     opencodePlugin?: string
     opencodeSkill?: string
+    /** Path (relative to packageDir) to a bundled Claude Code MCP server. */
+    claudeMcp?: string
+    /** Path (relative to packageDir) to a Claude Code skill markdown file. */
+    claudeSkill?: string
     requires?: PluginRequirement[]
     auth?: PluginAuth
     postInstall?: string[]
