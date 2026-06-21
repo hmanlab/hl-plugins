@@ -1,6 +1,6 @@
 {
   "name": "@hmanlab/multiplayer-watch",
-  "version": "0.3.1",
+  "version": "0.4.5",
   "type": "module",
   "description": "Companion TUI for the multiplayer plugin. Presence, chat, and chat-first input box over a Unix domain socket.",
   "bin": {

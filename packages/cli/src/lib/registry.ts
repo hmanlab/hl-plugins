@@ -1,17 +1,19 @@
 // Plugin discovery. Two sources, deduped by short name:
 //
 //   1. Dev mode    -- `packages/plugin-*/package.json` in the monorepo.
-//   2. Pub'd mode  -- `node_modules/@hl-plugins/*/package.json` walked up
+//   2. Pub'd mode  -- `node_modules/@hmanlab/*/package.json` walked up
 //                    from the CLI's own location.
 //
 // The CLI stays generic -- it never imports a plugin by name. Adding a
-// plugin is "drop a folder" in dev, or `npm install -g @hl-plugins/<name>`
-// in published mode.
+// plugin is "drop a folder" in dev, or auto-installed from npm in
+// published mode when the user requests it by name.
 
 import { readdirSync, readFileSync, existsSync } from "node:fs"
+import { execSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { dirname, join, basename, resolve } from "node:path"
 import { monorepoRoot } from "./paths.js"
+import { ui } from "./ui.js"
 
 export type PluginRequirement = {
   name: string
@@ -57,6 +59,10 @@ export type PluginManifest = {
   contract: {
     opencodePlugin?: string
     opencodeSkill?: string
+    /** Path (relative to packageDir) to a bundled Claude Code MCP server. */
+    claudeMcp?: string
+    /** Path (relative to packageDir) to a Claude Code skill markdown file. */
+    claudeSkill?: string
     requires?: PluginRequirement[]
     auth?: PluginAuth
     postInstall?: string[]
@@ -122,7 +128,7 @@ function discoverInNodeModules(): PluginManifest[] {
   const here = dirname(fileURLToPath(import.meta.url))
   const found: PluginManifest[] = []
   for (const nm of findAncestorNodeModules(here)) {
-    const scopeDir = join(nm, "@hl-plugins")
+    const scopeDir = join(nm, "@hmanlab")
     if (!existsSync(scopeDir)) continue
     for (const d of readdirSync(scopeDir)) {
       const plugin = tryReadPlugin(join(scopeDir, d), "node_modules")
@@ -151,15 +157,67 @@ export function getPlugin(name: string): PluginManifest {
   const match = all.find((p) => p.name === name)
   if (!match) {
     const known = all.map((p) => p.name).join(", ")
-    const hint =
-      match === null && !known
-        ? `\nIf you're using the published CLI, run \`npm install -g @hl-plugins/${name}\` first.`
-        : ""
+    const inMonorepo = inMonorepoRoot()
+    const hint = inMonorepo
+      ? `\nIf you're using the published CLI, run \`npm install -g @hmanlab/${name}\` first.`
+      : `\nIf you're using the published CLI, run \`npm install -g @hmanlab/${name}\` first.`
     throw new Error(`Unknown plugin: "${name}".\n` + `Known plugins: ${known || "(none discovered)"}.` + hint)
   }
   return match
 }
 
+/** True if this CLI is being run from a monorepo checkout (dev mode). */
+function inMonorepoRoot(): boolean {
+  try {
+    monorepoRoot()
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function defaultInstallPlugins(): PluginManifest[] {
   return discoverPlugins().filter((p) => p.contract.defaultInstall !== false)
+}
+
+/** The CLI's own package directory (parent of dist/ or src/). */
+function cliPackageDir(): string {
+  const here = dirname(fileURLToPath(import.meta.url))
+  return resolve(here, "..")
+}
+
+/**
+ * Ensure a plugin package is available. If discovery fails, install it
+ * from npm on the fly into the nearest node_modules ancestor. Throws
+ * if the package doesn't exist on npm or lacks an hl-plugins contract.
+ */
+export async function ensurePluginAvailable(name: string): Promise<PluginManifest> {
+  const existing = discoverPlugins().find((p) => p.name === name)
+  if (existing) return existing
+
+  const pkgName = `@hmanlab/${name}`
+  ui.info(`  Installing ${pkgName} from npm...`)
+
+  try {
+    execSync(`npm install ${pkgName}`, {
+      cwd: cliPackageDir(),
+      stdio: "pipe",
+      timeout: 60_000,
+    })
+  } catch (err) {
+    throw new Error(
+      `Plugin "${name}" not found locally.\n` +
+        `Tried to install ${pkgName} from npm but it failed.\n` +
+        `Make sure the package exists on npm and you have network access.`,
+    )
+  }
+
+  const after = discoverPlugins().find((p) => p.name === name)
+  if (!after) {
+    throw new Error(
+      `Plugin "${name}" not found after installing ${pkgName}.\n` +
+        `The package may not contain an hl-plugins contract.`,
+    )
+  }
+  return after
 }

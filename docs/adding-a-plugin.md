@@ -120,9 +120,25 @@ git push
 |---|---|
 | Folder name | `packages/plugin-<kebab-name>` |
 | npm name | `@hl-plugins/<kebab-name>` |
-| Plugin file | `opencode/plugin/<kebab-name>-tools.ts` |
-| Skill folder | `opencode/skill/<kebab-name>/` |
+| Plugin file (OpenCode) | `opencode/plugin/<kebab-name>-tools.ts` |
+| Skill folder (OpenCode) | `opencode/skill/<kebab-name>/` |
+| MCP server (Claude Code) | `claude/mcp/<kebab-name>-mcp-server.ts` (bundled by `bun build`) |
+| Skill folder (Claude Code) | `claude/skill/<kebab-name>/` |
 | Default install? | `true` for first-party; `false` for opt-in/experimental |
+
+## Target runtimes
+
+A plugin can target **OpenCode**, **Claude Code**, or both. The four
+file-pointer fields are independent — declare any subset. See
+[architecture.md#plugin-contract](./architecture.md#plugin-contract) for
+the full manifest shape.
+
+| Field | Runtime | Purpose |
+|---|---|---|
+| `opencodePlugin` | OpenCode | `.ts` source copied to `~/.opencode/plugin/` and added to `plugin[]` |
+| `opencodeSkill` | OpenCode | Markdown skill copied to `~/.opencode/skill/<plugin>/` |
+| `claudeMcp` | Claude Code | Bundled MCP server copied to `~/.local/share/hl-plugins/<plugin>/` and registered in `~/.claude.json`'s `mcpServers` |
+| `claudeSkill` | Claude Code | Markdown skill copied to `~/.claude/skills/<plugin>/SKILL.md` |
 
 ## Adding to default install set
 

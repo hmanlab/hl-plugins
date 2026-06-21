@@ -2,20 +2,25 @@
 // All paths are tilde-expanded so they survive the
 // `~/Desktop` vs `/Users/<u>/Desktop` macOS split described in AGENTS.md.
 
-import { homedir, platform } from "node:os"
 import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
 import { existsSync, readFileSync } from "node:fs"
+import { os_ } from "./os-shim.js"
 
-const HOME = homedir()
+/** The user's $HOME. Resolved on every call so tests can mock `os_.homedir`. */
+function HOME(): string {
+  return os_.homedir()
+}
+
+/** Current platform string. Resolved on every call so tests can mock `os_.platform`. */
+function PLATFORM(): NodeJS.Platform {
+  return os_.platform()
+}
 
 /** The user's OpenCode config directory. */
 export function opencodeConfigDir(): string {
   // macOS / Linux default per OpenCode docs. Add XDG/Windows later if needed.
-  if (platform() === "darwin" || platform() === "linux") {
-    return join(HOME, ".opencode")
-  }
-  return join(HOME, ".opencode")
+  return join(HOME(), ".opencode")
 }
 
 export function opencodePluginDir(): string {
@@ -32,7 +37,60 @@ export function opencodeConfigFile(): string {
 
 /** Where generated mmx assets land. */
 export function mmxOutputDir(): string {
-  return join(HOME, "Desktop", "mmx-output")
+  return join(HOME(), "Desktop", "mmx-output")
+}
+
+/**
+ * The user's Claude Code config directory.
+ *
+ * Claude Code's own data lives at `~/.claude/` (not in the config file at
+ * `~/.claude.json` — that file points back here). The directory holds the
+ * `skills/`, `plugins/`, etc. that Claude Code scans at startup.
+ */
+export function claudeConfigDir(): string {
+  if (PLATFORM() === "win32") {
+    const appdata = process.env.APPDATA ?? join(HOME(), "AppData", "Roaming")
+    return join(appdata, "Claude")
+  }
+  // macOS + Linux: ~/.claude/
+  return join(HOME(), ".claude")
+}
+
+/** Where Claude Code stores the skill markdown files for a given plugin. */
+export function claudeSkillDir(pluginName: string): string {
+  return join(claudeConfigDir(), "skills", pluginName)
+}
+
+/**
+ * Path to Claude Code's main settings file (the `mcpServers` registry).
+ * Cross-platform per Anthropic's docs: always `~/.claude.json` — even on
+ * Windows. (The `mcpServers` key in this file is the seam the install
+ * flow merges into.)
+ */
+export function claudeConfigFile(): string {
+  return join(HOME(), ".claude.json")
+}
+
+/**
+ * Where the CLI keeps runtime artifacts it owns — bundled MCP server
+ * executables, plugin-specific data dirs, etc. XDG-style on every
+ * platform: `~/.local/share/hl-plugins/` on macOS/Linux, `%LOCALAPPDATA%
+ * \hl-plugins\` on Windows.
+ */
+export function hlPluginsDataDir(): string {
+  if (PLATFORM() === "win32") {
+    const local = process.env.LOCALAPPDATA ?? join(HOME(), "AppData", "Local")
+    return join(local, "hl-plugins")
+  }
+  // macOS + Linux: $XDG_DATA_HOME/hl-plugins OR ~/.local/share/hl-plugins
+  const xdg = process.env.XDG_DATA_HOME
+  if (xdg) return join(xdg, "hl-plugins")
+  return join(HOME(), ".local", "share", "hl-plugins")
+}
+
+/** Where one plugin's runtime artifacts live under hlPluginsDataDir(). */
+export function hlPluginsDataPluginDir(pluginName: string): string {
+  return join(hlPluginsDataDir(), pluginName)
 }
 
 // Memoized: finding the monorepo root scans the filesystem, so do it once.
@@ -76,14 +134,21 @@ export function cliPackageDir(): string {
 
 /** Expand a leading `~` to $HOME. */
 export function expandHome(p: string): string {
-  if (p === "~") return HOME
-  if (p.startsWith("~/")) return join(HOME, p.slice(2))
+  const home = HOME()
+  if (p === "~") return home
+  if (p.startsWith("~/")) return join(home, p.slice(2))
   return p
 }
 
 /** Shorten a path for display by replacing $HOME with `~`. */
 export function tilde(p: string): string {
-  if (p === HOME) return "~"
-  if (p.startsWith(HOME + "/")) return "~" + p.slice(HOME.length)
+  const home = HOME()
+  if (p === home) return "~"
+  if (p.startsWith(home + "/")) return "~" + p.slice(home.length)
   return p
+}
+
+/** Resolve the current $HOME. Exported for tests and for the install flow. */
+export function homeDir(): string {
+  return HOME()
 }

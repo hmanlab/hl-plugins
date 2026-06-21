@@ -5,23 +5,25 @@
 //   2. Pre-flight (Node version, opencode config dir)
 //   3. Requirements (auto-install missing binaries)
 //   4. Authenticate (hidden API key prompt, region auto-retry on 401)
-//   5. Copy files (plugin + skill) into ~/.opencode/
-//   6. Merge config (additive, idempotent)
+//   5. Copy files (plugin + skill + claudeMcp bundle + claudeSkill)
+//   6. Merge config (additive, idempotent — opencode + claude.json)
 //   7. Verify (run postInstall commands)
 
 import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
-import { discoverPlugins, defaultInstallPlugins, getPlugin } from "../lib/registry.js"
+import { discoverPlugins, defaultInstallPlugins, ensurePluginAvailable } from "../lib/registry.js"
 import { run, runArgv, tryRun, ShellError, fillTemplate } from "../lib/shell.js"
 import { ui } from "../lib/ui.js"
 import {
+  claudeConfigDir,
+  claudeSkillDir,
+  hlPluginsDataPluginDir,
   opencodeConfigDir,
-  opencodeConfigFile,
   opencodePluginDir,
   opencodeSkillDir,
   tilde,
 } from "../lib/paths.js"
-import { addBashPermission, addPluginToConfig } from "../lib/config.js"
+import { addBashPermission, addMcpServer, addPluginToConfig, type McpServerSpec } from "../lib/config.js"
 import type { PluginManifest, PluginRequirement } from "../lib/registry.js"
 
 // ── Per-step actions ──────────────────────────────────────────────────────
@@ -139,6 +141,39 @@ async function copyPluginFiles(plugin: PluginManifest): Promise<string[]> {
     }
     copied.push(tilde(dest))
   }
+  if (plugin.contract.claudeMcp) {
+    const src = join(plugin.packageDir, plugin.contract.claudeMcp)
+    if (!existsSync(src)) {
+      throw new Error(
+        `Claude MCP bundle missing: ${src}\n` + `Run \`bun run build\` inside the plugin package first.`,
+      )
+    }
+    // Ship the bundle under ~/.local/share/hl-plugins/<plugin>/ so it
+    // survives the source package being moved/renamed, and Claude Code
+    // launches the same path on every machine.
+    const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    mkdirSync(dirname(dest), { recursive: true })
+    copyFileSync(src, dest)
+    copied.push(tilde(dest))
+  }
+  if (plugin.contract.claudeSkill) {
+    const src = join(plugin.packageDir, plugin.contract.claudeSkill)
+    if (!existsSync(src)) {
+      throw new Error(`Claude skill source missing: ${src}`)
+    }
+    // Claude Code scans ~/.claude/skills/<plugin>/SKILL.md, so the
+    // destination filename is always SKILL.md.
+    const dest = join(claudeSkillDir(plugin.name), "SKILL.md")
+    if (statSync(src).isDirectory()) {
+      // Mirror the dir under ~/.claude/skills/<plugin>/ (Claude scans
+      // subfolders for ancillary files too).
+      await copyDir(src, dirname(dest))
+    } else {
+      mkdirSync(dirname(dest), { recursive: true })
+      copyFileSync(src, dest)
+    }
+    copied.push(tilde(dest))
+  }
   return copied
 }
 
@@ -165,6 +200,18 @@ async function mergeConfig(plugin: PluginManifest): Promise<string[]> {
       changes.push(`added bash.${plugin.contract.permission} = "allow"`)
     } else {
       changes.push(`bash.${plugin.contract.permission} = "allow" already set`)
+    }
+  }
+  if (plugin.contract.claudeMcp) {
+    const bundlePath = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    // The MCP server is built --target=bun, so we launch it with bun.
+    // The bun binary is a hard requirement of this plugin (declared in
+    // requires[]) so it will be on PATH by the time we get here.
+    const spec: McpServerSpec = { command: "bun", args: [bundlePath] }
+    if (addMcpServer(plugin.name, spec)) {
+      changes.push(`added mcpServers.${plugin.name} → bun ${bundlePath}`)
+    } else {
+      changes.push(`mcpServers.${plugin.name} already registered`)
     }
   }
   return changes
@@ -255,10 +302,28 @@ function parseArgs(args: string[]): InstallOpts & { names: string[] } {
 
 export async function install(args: string[]): Promise<number> {
   const opts = parseArgs(args)
-  const targets = opts.names.length > 0 ? opts.names.map((n) => getPlugin(n)) : defaultInstallPlugins()
+  const targets =
+    opts.names.length > 0
+      ? await Promise.all(opts.names.map((n) => ensurePluginAvailable(n)))
+      : defaultInstallPlugins()
   if (targets.length === 0) {
     ui.warn("No plugins to install (none marked defaultInstall in this monorepo).")
     return 0
+  }
+
+  // Install hint: detect Claude Code systems that lack OpenCode. The
+  // user almost certainly wants mmx-claude, not mmx.
+  if (existsSync(claudeConfigDir()) && !existsSync(opencodeConfigDir())) {
+    const wantsMmx = targets.some((p) => p.name === "mmx")
+    if (wantsMmx) {
+      ui.info(
+        ui.yellow(
+          "Heads up: ~/.claude/ is present but ~/.opencode/ is not — looks like a Claude Code system. " +
+            "Did you mean `hl-plugins install mmx-claude` instead? " +
+            "Proceeding with the OpenCode install anyway.",
+        ),
+      )
+    }
   }
 
   let succeeded = 0

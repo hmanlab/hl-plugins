@@ -1,6 +1,6 @@
 {
   "name": "hl-plugins-monorepo",
-  "version": "0.3.1",
+  "version": "0.4.5",
   "private": true,
   "description": "Curated OpenCode plugins, installable with one command.",
   "type": "module",
@@ -10,9 +10,12 @@
   "scripts": {
     "dev": "node packages/cli/bin/hl-plugins.js",
     "help": "node packages/cli/bin/hl-plugins.js help",
-    "typecheck": "tsc -p packages/cli/tsconfig.json --noEmit && tsc -p scripts/triage/tsconfig.json --noEmit",
+    "typecheck": "tsc -p packages/cli/tsconfig.json --noEmit && tsc -p packages/cli/test/tsconfig.json --noEmit && tsc -p packages/plugin-mmx-claude/tsconfig.json --noEmit && tsc -p packages/plugin-mmx-claude/test/tsconfig.json --noEmit && tsc -p scripts/triage/tsconfig.json --noEmit",
     "build": "tsc -p packages/cli/tsconfig.json",
-    "clean": "rm -rf packages/cli/dist",
+    "build:mmx-claude": "bun run --filter @hl-plugins/mmx-claude build",
+    "clean": "rm -rf packages/cli/dist packages/plugin-mmx-claude/dist",
+    "test": "tsx --test packages/cli/test/lib/paths.test.ts packages/cli/test/lib/claude-config.test.ts",
+    "test:bun": "bun test packages/plugin-mmx-claude/test/",
     "format": "prettier --write \"**/*.{ts,json}\"",
     "format:check": "prettier --check \"**/*.{ts,json}\"",
     "prepublishOnly": "npm run typecheck && npm run build",
@@ -20,13 +23,15 @@
     "publish:companion": "npm publish --workspace packages/multiplayer-watch --access public"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/plugin": "^1.17.8",
     "@types/bun": "^1.3.14",
     "@types/node": "^22.10.2",
     "openai": "^4.104.0",
     "prettier": "^3.8.4",
     "tsx": "^4.22.4",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "zod": "^3.25.76"
   },
   "engines": {
     "node": ">=18"

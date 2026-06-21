@@ -1,9 +1,9 @@
-// Read / merge / write ~/.opencode/config.json.
+// Read / merge / write ~/.opencode/config.json AND ~/.claude.json.
 // All merges are additive — never destroy other plugins, MCP servers, or settings.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
 import { dirname } from "node:path"
-import { opencodeConfigFile } from "./paths.js"
+import { claudeConfigFile, opencodeConfigFile } from "./paths.js"
 
 export type OpencodeConfig = {
   $schema?: string
@@ -14,6 +14,24 @@ export type OpencodeConfig = {
     webfetch?: "allow" | "ask" | "deny" | Record<string, "allow" | "ask" | "deny">
     [tool: string]: unknown
   }
+  [key: string]: unknown
+}
+
+/**
+ * Shape of one MCP server entry in `~/.claude.json`'s `mcpServers` map.
+ * Claude Code's spec: command + args (the `type` is implicit "stdio" for
+ * command+args, "http" for url). We only emit stdio entries.
+ */
+export type McpServerSpec = {
+  type?: "stdio"
+  command: string
+  args: string[]
+  env?: Record<string, string>
+}
+
+export type ClaudeConfig = {
+  $schema?: string
+  mcpServers?: Record<string, McpServerSpec>
   [key: string]: unknown
 }
 
@@ -32,6 +50,45 @@ export function readOpencodeConfig(): OpencodeConfig {
 
 export function writeOpencodeConfig(cfg: OpencodeConfig): void {
   const file = opencodeConfigFile()
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n", "utf8")
+}
+
+/**
+ * Read `~/.claude.json` defensively. Claude Code's config file shape is
+ * not formally versioned, so we accept any JSON object and only assume
+ * the top-level `mcpServers` map (added by the addMcpServer / removeMcpServer
+ * helpers). If the file exists but is malformed JSON, surface a clear
+ * error rather than silently overwriting.
+ */
+export function readClaudeConfig(): ClaudeConfig {
+  const file = claudeConfigFile()
+  if (!existsSync(file)) return {}
+  let text: string
+  try {
+    text = readFileSync(file, "utf8")
+  } catch (err) {
+    throw new Error(`Failed to read ${file}: ${(err as Error).message}\n` + `Check the file's permissions.`)
+  }
+  // Claude Code writes an empty file on first launch — treat that as {}.
+  if (text.trim() === "") return {}
+  try {
+    const parsed = JSON.parse(text) as unknown
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("expected a top-level JSON object")
+    }
+    return parsed as ClaudeConfig
+  } catch (err) {
+    throw new Error(
+      `Failed to parse ${file}: ${(err as Error).message}\n` +
+        `The file may be from a newer/older Claude Code version. ` +
+        `Back it up and remove it, then retry.`,
+    )
+  }
+}
+
+export function writeClaudeConfig(cfg: ClaudeConfig): void {
+  const file = claudeConfigFile()
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n", "utf8")
 }
@@ -86,5 +143,51 @@ export function removeBashPermission(pattern: string): boolean {
   if (!bash || !(pattern in bash)) return false
   delete bash[pattern]
   writeOpencodeConfig(cfg)
+  return true
+}
+
+/**
+ * Add or replace an MCP server entry in `~/.claude.json`'s `mcpServers`
+ * map. Idempotent — returns false if the entry already exists with the
+ * same spec (deep-equal on command+args+env). If the existing entry
+ * differs, it is overwritten and the call returns true.
+ */
+export function addMcpServer(name: string, spec: McpServerSpec): boolean {
+  const cfg = readClaudeConfig()
+  cfg.mcpServers ??= {}
+  const current = cfg.mcpServers[name]
+  if (current && mcpSpecsEqual(current, spec)) return false
+  cfg.mcpServers[name] = spec
+  writeClaudeConfig(cfg)
+  return true
+}
+
+/**
+ * Remove an MCP server entry. Idempotent. Returns true if removed.
+ */
+export function removeMcpServer(name: string): boolean {
+  const cfg = readClaudeConfig()
+  const servers = cfg.mcpServers
+  if (!servers || !(name in servers)) return false
+  delete servers[name]
+  if (Object.keys(servers).length === 0) delete cfg.mcpServers
+  writeClaudeConfig(cfg)
+  return true
+}
+
+function mcpSpecsEqual(a: McpServerSpec, b: McpServerSpec): boolean {
+  if (a.command !== b.command) return false
+  if (a.args.length !== b.args.length) return false
+  for (let i = 0; i < a.args.length; i++) {
+    if (a.args[i] !== b.args[i]) return false
+  }
+  const aEnv = a.env ?? {}
+  const bEnv = b.env ?? {}
+  const aKeys = Object.keys(aEnv)
+  const bKeys = Object.keys(bEnv)
+  if (aKeys.length !== bKeys.length) return false
+  for (const k of aKeys) {
+    if (aEnv[k] !== bEnv[k]) return false
+  }
   return true
 }

@@ -72,18 +72,29 @@ When a user runs `hl-plugins install mmx` (after `npm install -g @hmanlab/hl-plu
     - if 401, set region: `mmx config set --key region --value global` or `cn`
     ↓
 [4] Copy files
-    - src:  packages/plugin-mmx/dist/mmx-tools.js  (bundled entry)
-      dest: ~/.opencode/plugin/mmx-tools.js
-    - src:  packages/plugin-mmx/opencode/skill/mmx/SKILL.md
-      dest: ~/.opencode/skill/mmx/SKILL.md
+    OpenCode target:
+      - src:  packages/plugin-mmx/opencode/plugin/mmx-tools.ts
+        dest: ~/.opencode/plugin/mmx-tools.ts
+      - src:  packages/plugin-mmx/opencode/skill/mmx/SKILL.md
+        dest: ~/.opencode/skill/mmx/SKILL.md
+    Claude Code target (if contract declares claudeMcp/claudeSkill):
+      - src:  packages/plugin-mmx-claude/dist/mmx-mcp-server.js
+        dest: ~/.local/share/hl-plugins/mmx-claude/mmx-mcp-server.js
+      - src:  packages/plugin-mmx-claude/claude/skill/mmx/SKILL.md
+        dest: ~/.claude/skills/mmx-claude/SKILL.md
     - create dirs as needed
     ↓
 [5] Merge config
-    - read ~/.opencode/config.json
-    - if missing, create a minimal one
-    - add "./plugin/mmx-tools.ts" to `plugin` array (idempotent)
-    - add `bash: { "mmx *": "allow" }` to `permission` (idempotent)
-    - write back, preserving every other field
+    OpenCode:
+      - read ~/.opencode/config.json
+      - if missing, create a minimal one
+      - add "./plugin/mmx-tools.ts" to `plugin` array (idempotent)
+      - add `bash: { "mmx *": "allow" }` to `permission` (idempotent)
+      - write back, preserving every other field
+    Claude Code (if claudeMcp):
+      - read ~/.claude.json (defensive: any JSON object accepted)
+      - add mcpServers["mmx-claude"] = { command: "bun", args: [<abs path>] }
+      - write back, preserving every other top-level key
     ↓
 [6] Verify
     - run plugin-specific verification (e.g. `mmx quota`)
@@ -91,11 +102,15 @@ When a user runs `hl-plugins install mmx` (after `npm install -g @hmanlab/hl-plu
 [7] Print success
     - green checkmarks per step
     - "✓ Done. Restart opencode to use the 7 mmx tools."
+    - "✓ Done. Restart Claude Code to load the 7 mmx tools from the
+       mmx-claude MCP server."
 ```
 
 ## Plugin contract
 
-Every `packages/plugin-*/package.json` must declare an `hl-plugins` field:
+Every `packages/plugin-*/package.json` must declare an `hl-plugins` field.
+A plugin can target **OpenCode**, **Claude Code**, or both. The four
+file-pointer fields are independent — declare any subset.
 
 ```jsonc
 {
@@ -104,12 +119,23 @@ Every `packages/plugin-*/package.json` must declare an `hl-plugins` field:
   "description": "Multimodal generation via MiniMax",
   "private": true,
   "hl-plugins": {
+    // ── OpenCode target ─────────────────────────────────────────────
     // Path to the OpenCode plugin file (relative to this package.json).
     // For plugins with internal src/ structure, this points to a bundled .js:
     "opencodePlugin": "./dist/mmx-tools.js",
 
     // Path to the OpenCode skill file (optional)
     "opencodeSkill": "./opencode/skill/mmx/SKILL.md",
+
+    // ── Claude Code target ──────────────────────────────────────────
+    // Path to a bundled MCP server. The CLI copies it to
+    // ~/.local/share/hl-plugins/<plugin>/ and registers the absolute
+    // path in mcpServers[name] of ~/.claude.json (command: "bun").
+    "claudeMcp": "./dist/mmx-mcp-server.js",
+
+    // Path to a Claude Code skill markdown. The CLI copies it to
+    // ~/.claude/skills/<plugin>/SKILL.md.
+    "claudeSkill": "./claude/skill/mmx/SKILL.md",
 
     // External binaries / packages this plugin needs
     "requires": [

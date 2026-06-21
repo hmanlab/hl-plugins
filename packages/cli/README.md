@@ -15,7 +15,12 @@ npm install -g @hmanlab/hl-plugins
 Or invoke directly via `npx` (no global install needed):
 
 ```bash
+# OpenCode plugins
 npx -y @hmanlab/hl-plugins install mmx
+npx -y @hmanlab/hl-plugins install multiplayer
+
+# Claude Code plugin
+npx -y @hmanlab/hl-plugins install mmx-claude
 ```
 
 ## Usage
@@ -37,7 +42,9 @@ settings are left untouched.
 
 | Plugin | Description | Requires |
 |---|---|---|
-| [`@hl-plugins/mmx`](https://github.com/hmanlab/hl-plugins/tree/main/packages/plugin-mmx) | Image, video, music, speech, search, vision, and quota via MiniMax | [`mmx-cli`](https://github.com/MiniMax-AI/cli) + MiniMax Token Plan |
+| [`@hmanlab/mmx`](https://github.com/hmanlab/hl-plugins/tree/main/packages/plugin-mmx) | Image, video, music, speech, search, vision, and quota via MiniMax | [`mmx-cli`](https://github.com/MiniMax-AI/cli) + MiniMax Token Plan |
+| [`@hmanlab/mmx-claude`](https://github.com/hmanlab/hl-plugins/tree/main/packages/plugin-mmx-claude) | Claude Code MCP adapter for MiniMax multimodal tools | [`mmx-cli`](https://github.com/MiniMax-AI/cli) + `bun` |
+| [`@hmanlab/multiplayer`](https://github.com/hmanlab/hl-plugins/tree/main/packages/plugin-multiplayer) | Real-time multiplayer for OpenCode | None |
 
 To install a plugin's dependency, the CLI runs the contract's `requires[].install`
 for you (e.g. `npm install -g mmx-cli`). When the plugin needs credentials,

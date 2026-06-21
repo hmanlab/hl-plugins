@@ -48,9 +48,14 @@ Re-runnable and idempotent — running `install` again is a no-op.
 
 ## Plugins
 
-| Plugin | Description | Requires |
-|---|---|---|
-| `@hl-plugins/mmx` | Image, video, music, speech, search, vision, and quota via MiniMax | [`mmx-cli`](https://github.com/MiniMax-AI/cli) + MiniMax Token Plan |
+| Plugin | Runtime | Description | Requires |
+|---|---|---|---|
+| `@hl-plugins/mmx` | OpenCode | Image, video, music, speech, search, vision, and quota via MiniMax | [`mmx-cli`](https://github.com/MiniMax-AI/cli) + MiniMax Token Plan |
+| `@hl-plugins/mmx-claude` | Claude Code | Same seven mmx tools, exposed as an MCP server for Claude Code | `mmx-cli` + Bun + MiniMax Token Plan |
+
+**Choosing the right package.** Install `mmx` for OpenCode, `mmx-claude` for
+Claude Code. Both wrap the same `mmx-cli` and share the same API key — they
+are two install records, not two products.
 
 The CLI is plugin-agnostic — adding a new one is just dropping a `packages/plugin-<name>/` folder with the right contract. No CLI changes required. See [docs/adding-a-plugin.md](docs/adding-a-plugin.md).
 

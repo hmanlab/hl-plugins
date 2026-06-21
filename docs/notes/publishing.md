@@ -16,20 +16,27 @@ nothing fires automatically.
 ## TL;DR
 
 ```bash
-# bump version
-$EDITOR packages/cli/package.json    # version: 0.X.Y
+# bump version in all packages
+$EDITOR packages/cli/package.json
+$EDITOR packages/plugin-mmx/package.json
+$EDITOR packages/plugin-mmx-claude/package.json
+$EDITOR packages/plugin-multiplayer/package.json
+$EDITOR packages/multiplayer-watch/package.json
 git add -A
 git commit -am "chore(publish): bump to 0.X.Y"
 
 # (A) publish from this machine  ← most common
 npm run publish:cli
+npm publish --workspace packages/plugin-mmx --access public
+npm publish --workspace packages/plugin-mmx-claude --access public
+npm publish --workspace packages/plugin-multiplayer --access public
 
 # OR (B) tag for CI  ← needs NPM_TOKEN set in repo secrets
 git tag v0.X.Y
 git push origin main --tags
 ```
 
-After (A) the version is live on npm immediately.
+After (A) the versions are live on npm immediately.
 After (B) the `publish.yml` workflow runs and publishes with npm provenance.
 
 ---
@@ -52,11 +59,20 @@ packages/cli --access public`.
 
 **Per-release:**
 
-1. Bump `version` in `packages/cli/package.json`.
+1. Bump `version` in all package.json files (cli, plugin-mmx, plugin-mmx-claude, plugin-multiplayer, multiplayer-watch).
 2. `git commit -am "chore(publish): bump to 0.X.Y"`.
 3. `git push origin main`.
-4. `npm run publish:cli` — reads your local `~/.npmrc` token.
-5. Verify: `npm view "@hmanlab/hl-plugins" versions` — newest version
+4. Publish plugin packages first (CLI depends on them being on npm):
+   ```bash
+   npm publish --workspace packages/plugin-mmx --access public
+   npm publish --workspace packages/plugin-mmx-claude --access public
+   npm publish --workspace packages/plugin-multiplayer --access public
+   ```
+5. Publish the CLI:
+   ```bash
+   npm run publish:cli
+   ```
+6. Verify: `npm view "@hmanlab/hl-plugins" versions` — newest version
    should be at the end.
 
 **Pros:** no secrets to manage, instant feedback, no GH Actions minutes used.
@@ -84,7 +100,7 @@ Defined in `.github/workflows/publish.yml`. Triggered by pushing a
 
 **Per-release:**
 
-1. Bump `version` in `packages/cli/package.json`.
+1. Bump `version` in all package.json files (cli, plugin-mmx, plugin-mmx-claude, plugin-multiplayer, multiplayer-watch).
 2. `git commit -am "chore(publish): bump to 0.X.Y"`.
 3. `git push origin main`.
 4. `git tag v0.X.Y && git push origin main --tags`.
@@ -115,7 +131,13 @@ commit or rely on the workflow to do it, the publish step succeeds.
 
 ## npm registry state to remember
 
-- Package name: `@hmanlab/hl-plugins`
+- Scope: `@hmanlab` — all packages live under this scope.
+- Packages:
+  - `@hmanlab/hl-plugins` — CLI (the installer)
+  - `@hmanlab/mmx` — OpenCode plugin for MiniMax multimodal tools
+  - `@hmanlab/mmx-claude` — Claude Code MCP adapter for MiniMax
+  - `@hmanlab/multiplayer` — OpenCode multiplayer plugin
+  - `@hmanlab/multiplayer-watch` — companion TUI for multiplayer
 - Bin name: `hl-plugins` (unchanged, so `hl-plugins install mmx` still
   works after `npm i -g @hmanlab/hl-plugins`)
 - Tarball provenance: signed when published via CI (Flow B). Local
