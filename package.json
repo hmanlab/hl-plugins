@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node packages/cli/bin/hl-plugins.js",
     "help": "node packages/cli/bin/hl-plugins.js help",
-    "typecheck": "tsc -p packages/cli/tsconfig.json --noEmit",
+    "typecheck": "tsc -p packages/cli/tsconfig.json --noEmit && tsc -p scripts/triage/tsconfig.json --noEmit",
     "build": "tsc -p packages/cli/tsconfig.json",
     "clean": "rm -rf packages/cli/dist",
     "format": "prettier --write \"**/*.{ts,json}\"",
@@ -23,6 +23,7 @@
     "@opencode-ai/plugin": "^1.17.8",
     "@types/bun": "^1.3.14",
     "@types/node": "^22.10.2",
+    "openai": "^4.104.0",
     "prettier": "^3.8.4",
     "tsx": "^4.22.4",
     "typescript": "^5.7.2"

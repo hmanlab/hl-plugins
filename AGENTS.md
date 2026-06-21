@@ -17,6 +17,25 @@
 - Don't commit secrets (no API keys, no SSH keys).
 - Don't change the plugin contract without updating `docs/architecture.md` and `docs/adding-a-plugin.md` in the same commit.
 - Don't push to `main` without a clean working tree and a passing `git status`.
+
+## Triage bot
+
+- `.github/workflows/hmanlab-triage.yml` runs on every **new** issue
+  whose body or title contains `@hmanlab`.
+- It calls `scripts/triage/issue-triage.ts` (via `tsx`), which uses the
+  `openai` SDK as a transport and posts the result as a comment.
+- Provider is **swappable at runtime** via two repo variables:
+  `OPENAI_BASE_URL` (default `https://api.minimax.io/v1`) and
+  `OPENAI_MODEL` (default `MiniMax-M3`). GLM, Kimi, DeepSeek, OpenAI,
+  OpenRouter all work — same protocol, just set the two vars.
+- Requires the `LLM_API_KEY` repo secret.
+- The comment body follows the AGENTS.md issue template (Summary, Repro,
+  Root cause, Impact, Proposed fix, Behavior after, Alternatives,
+  Affected files, Version). Don't change the format — it's the
+  maintainer's skim contract.
+- Full setup, provider recipes, and disable instructions:
+  `docs/notes/agent-triage.md`.
+
 - **Use closing keywords on PRs.** GitHub only auto-closes issues when the PR body or a commit message contains `Closes #N`, `Fixes #N`, or `Resolves #N`. A bare `#N` reference (in the PR title or commit message) just links the issue — it does not close it.
 
 ## GitHub issue and PR body format

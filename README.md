@@ -8,6 +8,7 @@ MIT licensed · No telemetry · Open source
 
 [![npm version](https://img.shields.io/npm/v/@hmanlab/hl-plugins.svg)](https://www.npmjs.com/package/@hmanlab/hl-plugins)
 [![CI](https://github.com/hmanlab/hl-plugins/actions/workflows/ci.yml/badge.svg)](https://github.com/hmanlab/hl-plugins/actions/workflows/ci.yml)
+[![Triage bot](https://github.com/hmanlab/hl-plugins/actions/workflows/hmanlab-triage.yml/badge.svg)](https://github.com/hmanlab/hl-plugins/actions/workflows/hmanlab-triage.yml)
 [![npm downloads](https://img.shields.io/npm/dm/@hmanlab/hl-plugins.svg)](https://www.npmjs.com/package/@hmanlab/hl-plugins)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
