@@ -93,6 +93,12 @@ export function bootstrapProjectSchema(db: import("bun:sqlite").Database): void 
     projectMigrations: ReadonlyArray<string>
   }
   applyMigrations(db, projectMigrations)
+  // Phase 06 graph: memory_edges table.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { MEMORY_EDGES_SCHEMA } = require("../graph/schema.js") as {
+    MEMORY_EDGES_SCHEMA: string
+  }
+  db.exec(MEMORY_EDGES_SCHEMA)
   try {
     db.exec(PROJECT_VECTOR_SCHEMA)
   } catch (err) {

@@ -91,6 +91,19 @@ CREATE TABLE IF NOT EXISTS global_memories (
 CREATE INDEX IF NOT EXISTS idx_global_memories_persona   ON global_memories(persona_id);
 CREATE INDEX IF NOT EXISTS idx_global_memories_superseded ON global_memories(superseded_by);
 
+-- Phase 06: global memory edges (graph).
+CREATE TABLE IF NOT EXISTS global_memory_edges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id INTEGER NOT NULL,
+  target_id INTEGER NOT NULL,
+  relation TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(source_id, target_id, relation)
+);
+
+CREATE INDEX IF NOT EXISTS idx_global_edges_source ON global_memory_edges(source_id);
+CREATE INDEX IF NOT EXISTS idx_global_edges_target ON global_memory_edges(target_id);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS global_memories_fts USING fts5(
   content, category, channel,
   content='global_memories', content_rowid='id',

@@ -4,18 +4,24 @@
   "description": "Local-first MCP server for persistent, persona-aware memory across projects.",
   "type": "module",
   "files": [
+    "bin",
     "claude",
     "dist",
     "README.md"
   ],
   "scripts": {
-    "build": "bun build ./src/server.ts --target=bun --outfile=./dist/memo-mcp-server.js",
+    "build": "bun build ./src/server.ts --target=bun --outfile=./dist/memo-mcp-server.js && bun build ./src/cli/main.ts --target=bun --outfile=./dist/cli.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc -p . --noEmit",
     "test": "bun test tests/"
   },
+  "bin": {
+    "hmanlab-memory": "./bin/hmanlab-memory.js"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "adm-zip": "^0.5.16",
+    "commander": "^12.1.0",
     "yaml": "^2.6.0",
     "zod": "^3.25.76"
   },

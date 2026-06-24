@@ -2,7 +2,7 @@
 //
 // Spawns the built MCP bundle (dist/memo-mcp-server.js) over stdio, runs the
 // JSON-RPC `initialize` + `notifications/initialized` + `tools/list` handshake,
-// and asserts that exactly the expected tools (Phases 01-05) are registered.
+// and asserts that exactly the expected tools (Phases 01-06) are registered.
 //
 // Prereq: run `bun run --filter @hmanlab/memo build` first.
 
@@ -47,6 +47,8 @@ const EXPECTED_TOOLS = [
   "memory_promote_to_global",
   "memory_archive",
   "memory_hygiene",
+  "memory_link",
+  "memory_related",
 ]
 
 interface JsonRpcResponse {

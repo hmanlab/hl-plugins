@@ -36,6 +36,8 @@ import {
 import { detectConflict } from "../conflict/detector.js"
 import { getEmbedder } from "../embedder.js"
 import { buildHygieneReport, type HygieneReport } from "../memory/hygiene.js"
+import { memoryLink, memoryRelated } from "../graph/edges.js"
+import { bootstrapEdges } from "../graph/schema.js"
 
 /** Open the active project's DB and pass it to fn. Used by scope="project"
  *  and scope="all" — the latter also passes rootDb alongside. */
@@ -525,6 +527,100 @@ export function registerMemoryTools(
         return jsonResult(report)
       } catch (err) {
         return textResult(`memory_hygiene failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_link ───────────────────────────────────────────────────────
+  server.registerTool(
+    "memory_link",
+    {
+      description:
+        "Insert an edge between two memories in the active project. The relation is free-form (suggested: 'supports', 'contradicts', 'derived_from', 'see_also'). Duplicate (source, target, relation) tuples are rejected.",
+      inputSchema: {
+        source_id: z.number().int().positive().describe("Source memory id."),
+        target_id: z.number().int().positive().describe("Target memory id."),
+        relation: z.string().min(1).describe("Edge relation (free-form)."),
+        scope: z.enum(["project", "global"]).optional(),
+      },
+    },
+    async (args) => {
+      const scope: Scope = args.scope ?? "project"
+      try {
+        if (scope === "project") {
+          await withProjectDb(switcher, (db) => {
+            bootstrapEdges(db, "project")
+            return memoryLink({
+              db,
+              scope: "project",
+              sourceId: args.source_id,
+              targetId: args.target_id,
+              relation: args.relation,
+            })
+          })
+        } else {
+          bootstrapEdges(rootDb, "global")
+          memoryLink({
+            db: rootDb,
+            scope: "global",
+            sourceId: args.source_id,
+            targetId: args.target_id,
+            relation: args.relation,
+          })
+        }
+        return jsonResult({
+          source_id: args.source_id,
+          target_id: args.target_id,
+          relation: args.relation,
+          scope,
+        })
+      } catch (err) {
+        return textResult(`memory_link failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_related ────────────────────────────────────────────────────
+  server.registerTool(
+    "memory_related",
+    {
+      description:
+        "Walk the memory graph from `id` up to `depth` hops. Returns the seed node plus all reachable nodes with their depth and the relation used to reach them. Cycle-safe (visited set).",
+      inputSchema: {
+        id: z.number().int().positive().describe("Seed memory id."),
+        depth: z.number().int().min(1).max(10).optional().describe("Max hop count. Default 2."),
+        scope: z.enum(["project", "global"]).optional(),
+      },
+    },
+    async (args) => {
+      const scope: Scope = args.scope ?? "project"
+      try {
+        const result =
+          scope === "project"
+            ? await withProjectDb(switcher, (db) => {
+                bootstrapEdges(db, "project")
+                return Promise.resolve(
+                  memoryRelated({
+                    db,
+                    scope: "project",
+                    id: args.id,
+                    depth: args.depth,
+                  }),
+                )
+              })
+            : (() => {
+                bootstrapEdges(rootDb, "global")
+                return memoryRelated({
+                  db: rootDb,
+                  scope: "global",
+                  id: args.id,
+                  depth: args.depth,
+                })
+              })()
+        if (!result) return textResult(`Memory ${args.id} not found in ${scope}`)
+        return jsonResult(result)
+      } catch (err) {
+        return textResult(`memory_related failed: ${(err as Error).message}`)
       }
     },
   )
