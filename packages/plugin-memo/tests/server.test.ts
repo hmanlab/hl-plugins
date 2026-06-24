@@ -2,7 +2,7 @@
 //
 // Spawns the built MCP bundle (dist/memo-mcp-server.js) over stdio, runs the
 // JSON-RPC `initialize` + `notifications/initialized` + `tools/list` handshake,
-// and asserts that exactly the 9 phase-01 tools are registered.
+// and asserts that exactly the phase-01 + phase-02 tools are registered.
 //
 // Prereq: run `bun run --filter @hmanlab/memo build` first.
 
@@ -25,6 +25,13 @@ const EXPECTED_TOOLS = [
   "persona_reload",
   "user_persona_get",
   "user_persona_update",
+  "project_register",
+  "project_list",
+  "project_get",
+  "project_switch",
+  "get_active_project",
+  "project_archive",
+  "project_unregister",
 ]
 
 interface JsonRpcResponse {
@@ -130,7 +137,7 @@ describe("MCP server bundle (dist/memo-mcp-server.js)", () => {
     expect(toolNames).toContain(name)
   })
 
-  it("registers exactly the nine phase-01 tools (no extras)", () => {
+  it("registers exactly the expected tools (no extras)", () => {
     expect([...toolNames].sort()).toEqual([...EXPECTED_TOOLS].sort())
   })
 })

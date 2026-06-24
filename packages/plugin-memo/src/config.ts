@@ -37,6 +37,10 @@ export function personasDirPath(): string {
   return join(hmanlabHome(), "personas")
 }
 
+export function projectsDirPath(): string {
+  return join(hmanlabHome(), "projects")
+}
+
 export function configYamlPath(): string {
   return join(hmanlabHome(), "config.yaml")
 }
@@ -102,13 +106,15 @@ export function writeConfig(partial: Partial<MemoConfig>): MemoConfig {
 }
 
 /**
- * First-boot helper. Creates ~/.hmanlab/ and the personas/ subdirectory, then
- * writes the default config.yaml only if no config file exists yet. Idempotent.
+ * First-boot helper. Creates ~/.hmanlab/ and the personas/ + projects/
+ * subdirectories, then writes the default config.yaml only if no config file
+ * exists yet. Idempotent.
  */
 export function ensureHome(): void {
   const home = hmanlabHome()
   mkdirSync(home, { recursive: true })
   mkdirSync(personasDirPath(), { recursive: true })
+  mkdirSync(projectsDirPath(), { recursive: true })
   const cfg = configYamlPath()
   if (!existsSync(cfg)) {
     writeConfig({}) // merges defaults onto an empty read, writes merged

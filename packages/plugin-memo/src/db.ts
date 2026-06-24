@@ -57,6 +57,21 @@ CREATE TABLE IF NOT EXISTS ai_personas (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_personas_archived ON ai_personas(is_archived);
+
+CREATE TABLE IF NOT EXISTS projects (
+  name              TEXT    PRIMARY KEY,
+  path              TEXT    NOT NULL,
+  description       TEXT    NOT NULL DEFAULT '',
+  decay_policy      TEXT    NOT NULL DEFAULT '{"access_zero_decay_days":30,"cold_days":90,"cold_importance_threshold":0.3}',
+  default_persona   TEXT    NOT NULL DEFAULT 'default',
+  is_archived       INTEGER NOT NULL DEFAULT 0,
+  last_opened_at    INTEGER,
+  created_at        INTEGER NOT NULL DEFAULT 0,
+  updated_at        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(is_archived);
+CREATE INDEX IF NOT EXISTS idx_projects_last_opened ON projects(last_opened_at);
 `
 
 /** Open the root DB with WAL + foreign keys on. Schema is bootstrapped if missing. */
@@ -119,7 +134,19 @@ export function rowToPersona(row: AiPersonaRow): {
   }
 }
 
-/** Register a process-signal hook that closes the DB cleanly on shutdown. */
+/**
+ * Open (or create) a project DB. WAL on, foreign keys on, synchronous=NORMAL.
+ * The full project schema is applied by the caller via
+ * `bootstrapProjectSchema(db)` — keeping schema.ts as the single source of
+ * truth and avoiding a cycle through this module.
+ */
+export function openProjectDb(path: string): Database {
+  const db = new Database(path, { create: true })
+  db.exec("PRAGMA journal_mode = WAL;")
+  db.exec("PRAGMA foreign_keys = ON;")
+  db.exec("PRAGMA synchronous = NORMAL;")
+  return db
+}
 export function installShutdownHooks(db: Database): () => void {
   let closed = false
   const close = (signal: NodeJS.Signals) => {

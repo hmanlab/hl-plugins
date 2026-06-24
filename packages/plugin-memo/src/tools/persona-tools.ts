@@ -26,7 +26,7 @@ export function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] }
 }
 
-function jsonResult(value: unknown) {
+export function jsonResult(value: unknown) {
   return textResult(JSON.stringify(value, null, 2))
 }
 
