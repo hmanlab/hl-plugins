@@ -25,6 +25,7 @@ import { extractStarterPack, setBuiltins, syncFromDisk } from "./persona/registr
 import { ProjectSwitcher } from "./project/switcher.js"
 import { registerPersonaTools } from "./tools/persona-tools.js"
 import { registerProjectTools } from "./tools/project-tools.js"
+import { registerMemoryTools } from "./tools/memory-tools.js"
 
 // Bundled YAML assets. `with { type: "text" }` instructs Bun's bundler to
 // inline the file content as a string literal at build time.
@@ -73,6 +74,7 @@ async function main(): Promise<void> {
   const server = new McpServer({ name: "hmanlab-memo", version: "0.4.5" })
   registerPersonaTools(server, db, () => personasDirPath())
   registerProjectTools(server, db, switcher, () => projectsDirPath())
+  registerMemoryTools(server, db, switcher, () => projectsDirPath())
 
   // 8) Connect stdio transport and wait for the client to close us.
   const transport = new StdioServerTransport()

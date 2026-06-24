@@ -1,9 +1,8 @@
 // Root SQLite connection + schema bootstrap for hmanlab-memo.
 //
-// Phase 01 only touches two tables: `user_persona` (singleton row) and
-// `ai_personas` (one row per persona, indexed for archive filter + lookup by
-// parent). WAL is enabled so concurrent reads don't block writers. Foreign keys
-// are on for the `parent` self-reference.
+// Phase 01 added `user_persona` + `ai_personas`. Phase 03 adds
+// `global_memories` + its FTS5 mirror (with sync triggers). Vector storage
+// for global_memories ships in Phase 04 once we have a real embedder target.
 //
 // We use bun:sqlite — the only SQLite driver that runs natively in Bun (the
 // target runtime). Its API is intentionally close to better-sqlite3 so this
@@ -72,6 +71,49 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(is_archived);
 CREATE INDEX IF NOT EXISTS idx_projects_last_opened ON projects(last_opened_at);
+
+-- Phase 03: global memories. Cross-project tier; FTS5-backed; no vec0 in MVP.
+CREATE TABLE IF NOT EXISTS global_memories (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  content          TEXT    NOT NULL,
+  category         TEXT,
+  channel          TEXT,
+  persona_id       TEXT    NOT NULL DEFAULT 'default',
+  importance       REAL    NOT NULL DEFAULT 0.5,
+  access_count     INTEGER NOT NULL DEFAULT 0,
+  last_accessed_at INTEGER,
+  superseded_by    INTEGER REFERENCES global_memories(id) ON DELETE SET NULL,
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,
+  embedding        BLOB
+);
+
+CREATE INDEX IF NOT EXISTS idx_global_memories_persona   ON global_memories(persona_id);
+CREATE INDEX IF NOT EXISTS idx_global_memories_superseded ON global_memories(superseded_by);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS global_memories_fts USING fts5(
+  content, category, channel,
+  content='global_memories', content_rowid='id',
+  tokenize="unicode61 remove_diacritics 2 tokenchars '_-'"
+);
+
+-- FTS5 sync triggers for global_memories.
+CREATE TRIGGER IF NOT EXISTS global_memories_ai AFTER INSERT ON global_memories BEGIN
+  INSERT INTO global_memories_fts(rowid, content, category, channel)
+    VALUES (new.id, new.content, new.category, new.channel);
+END;
+
+CREATE TRIGGER IF NOT EXISTS global_memories_ad AFTER DELETE ON global_memories BEGIN
+  INSERT INTO global_memories_fts(global_memories_fts, rowid, content, category, channel)
+    VALUES ('delete', old.id, old.content, old.category, old.channel);
+END;
+
+CREATE TRIGGER IF NOT EXISTS global_memories_au AFTER UPDATE ON global_memories BEGIN
+  INSERT INTO global_memories_fts(global_memories_fts, rowid, content, category, channel)
+    VALUES ('delete', old.id, old.content, old.category, old.channel);
+  INSERT INTO global_memories_fts(rowid, content, category, channel)
+    VALUES (new.id, new.content, new.category, new.channel);
+END;
 `
 
 /** Open the root DB with WAL + foreign keys on. Schema is bootstrapped if missing. */
