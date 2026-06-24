@@ -1,8 +1,9 @@
 // Memory tools: save / get / update / delete / search / semantic_search / recent.
 //
-// All project-scoped calls go through `requireActive(switcher)` so the
-// "no active project" error contract from Phase 02 is preserved. Calls with
-// `scope="global"` bypass the active-project check (they target root.db).
+// Phase 04 upgrade: `scope` accepts "all" (= project + global, RRF-fused),
+// in addition to the Phase 03 "project" / "global". `persona_filter_mode`
+// is read from config on each call so a write to config.yaml takes effect
+// without a server restart.
 //
 // Embedding is lazy — the first call to any tool that touches the embedder
 // initializes it. Boot stays <2s.
@@ -12,30 +13,34 @@ import type { Database } from "bun:sqlite"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { ProjectSwitcher } from "../project/switcher.js"
 import { openProjectDb } from "../db.js"
+import { readConfig } from "../config.js"
 import { textResult, jsonResult } from "./persona-tools.js"
 import { requireActive } from "./project-tools.js"
 import { memoryDelete, memoryGet, memorySave, memoryUpdate, type Scope } from "../memory/crud.js"
-import { memoryRecent, memorySearch, memorySemanticSearch } from "../memory/search.js"
+import {
+  memoryRecent,
+  memorySearch,
+  memorySemanticSearch,
+  type CrossDbScope,
+} from "../memory/search.js"
 
-/** Run `fn` against the right DB for the given scope. Closes project DBs
- *  after use; never closes rootDb (caller owns it). */
-async function withScopeDb<T>(
-  scope: Scope,
+/** Open the active project's DB and pass it to fn. Used by scope="project"
+ *  and scope="all" — the latter also passes rootDb alongside. */
+function withProjectDb<T>(
   switcher: ProjectSwitcher,
-  rootDb: Database,
-  projectsRoot: () => string,
-  fn: (db: Database, projectName: string | null) => T | Promise<T>,
-): Promise<T> {
-  if (scope === "project") {
-    const active = requireActive(switcher)
-    const db = openProjectDb(active.db_path)
-    try {
-      return await fn(db, active.name)
-    } finally {
-      db.close()
-    }
+  fn: (db: Database, projectName: string) => T | Promise<T>,
+): T | Promise<T> {
+  const active = requireActive(switcher)
+  const db = openProjectDb(active.db_path)
+  try {
+    return fn(db, active.name)
+  } finally {
+    // For "all", search/semantic/recent keep the DB open for the duration
+    // of the call; we close in the caller. But to keep things simple, we
+    // open + close per call here and let the caller re-open if needed.
+    // (Since these tools are one-shot, the cost is acceptable.)
+    setImmediate(() => db.close())
   }
-  return await fn(rootDb, null)
 }
 
 export function registerMemoryTools(
@@ -62,22 +67,29 @@ export function registerMemoryTools(
     async (args) => {
       const scope: Scope = args.scope ?? "project"
       try {
-        const result = await withScopeDb(
-          scope,
-          switcher,
-          rootDb,
-          projectsRoot,
-          (db, projectName) =>
-            memorySave(db, {
-              content: args.content,
-              category: args.category ?? null,
-              channel: args.channel ?? null,
-              importance: args.importance ?? 0.5,
-              persona_id: args.persona_id ?? "default",
-              scope,
-              project_id: projectName ?? undefined,
-            }),
-        )
+        const result =
+          scope === "project"
+            ? await withProjectDb(switcher, (db, projectName) =>
+                Promise.resolve(
+                  memorySave(db, {
+                    content: args.content,
+                    category: args.category ?? null,
+                    channel: args.channel ?? null,
+                    importance: args.importance ?? 0.5,
+                    persona_id: args.persona_id ?? "default",
+                    scope: "project",
+                    project_id: projectName,
+                  }),
+                ),
+              )
+            : memorySave(rootDb, {
+                content: args.content,
+                category: args.category ?? null,
+                channel: args.channel ?? null,
+                importance: args.importance ?? 0.5,
+                persona_id: args.persona_id ?? "default",
+                scope: "global",
+              })
         return jsonResult(result)
       } catch (err) {
         return textResult(`memory_save failed: ${(err as Error).message}`)
@@ -99,9 +111,10 @@ export function registerMemoryTools(
     async (args) => {
       const scope: Scope = args.scope ?? "project"
       try {
-        const row = await withScopeDb(scope, switcher, rootDb, projectsRoot, (db) =>
-          memoryGet(db, args.id, scope),
-        )
+        const row =
+          scope === "project"
+            ? await withProjectDb(switcher, (db) => Promise.resolve(memoryGet(db, args.id, "project")))
+            : memoryGet(rootDb, args.id, "global")
         if (!row) return textResult(`Memory ${args.id} not found in ${scope}`)
         return jsonResult(row)
       } catch (err) {
@@ -129,9 +142,12 @@ export function registerMemoryTools(
       const scope: Scope = args.scope ?? "project"
       const { id, scope: _s, ...patch } = args
       try {
-        const result = await withScopeDb(scope, switcher, rootDb, projectsRoot, (db) =>
-          memoryUpdate(db, id, scope, patch),
-        )
+        const result =
+          scope === "project"
+            ? await withProjectDb(switcher, (db) =>
+                Promise.resolve(memoryUpdate(db, id, "project", patch)),
+              )
+            : memoryUpdate(rootDb, id, "global", patch)
         return jsonResult(result)
       } catch (err) {
         return textResult(`memory_update failed: ${(err as Error).message}`)
@@ -153,9 +169,13 @@ export function registerMemoryTools(
     async (args) => {
       const scope: Scope = args.scope ?? "project"
       try {
-        await withScopeDb(scope, switcher, rootDb, projectsRoot, (db) => {
-          memoryDelete(db, args.id, scope)
-        })
+        if (scope === "project") {
+          await withProjectDb(switcher, (db) => {
+            memoryDelete(db, args.id, "project")
+          })
+        } else {
+          memoryDelete(rootDb, args.id, "global")
+        }
         return textResult(`Deleted memory ${args.id} from ${scope}.`)
       } catch (err) {
         return textResult(`memory_delete failed: ${(err as Error).message}`)
@@ -168,7 +188,7 @@ export function registerMemoryTools(
     "memory_search",
     {
       description:
-        "Hybrid search: FTS5 + vector + recency, fused with RRF (k_const=60). scope='project' (default) targets the active project; 'global' targets root.db.global_memories.",
+        "Hybrid search: FTS5 + vector + recency, fused with RRF (k_const=60). scope='all' (default) searches both the active project AND root.db.global_memories, tagging each result with source_db. scope='project' targets only the active project; scope='global' targets only root.db.global_memories. persona_filter_mode from config.yaml (default 'inclusive') controls whether NULL-persona memories match a persona_id filter.",
       inputSchema: {
         query: z.string().min(1),
         limit: z.number().int().min(1).max(100).optional(),
@@ -176,23 +196,45 @@ export function registerMemoryTools(
         persona_id: z
           .string()
           .optional()
-          .describe("Filter by persona (inclusive: matches the given persona OR NULL)."),
-        scope: z.enum(["project", "global"]).optional(),
+          .describe("Filter by persona. Honors persona_filter_mode config (inclusive|strict)."),
+        scope: z.enum(["all", "project", "global"]).optional(),
       },
     },
     async (args) => {
-      const scope: Scope = args.scope ?? "project"
+      const scope: CrossDbScope = args.scope ?? "all"
+      const cfg = readConfig()
       try {
-        const result = await withScopeDb(scope, switcher, rootDb, projectsRoot, (db) =>
-          memorySearch(db, {
+        if (scope === "all" || scope === "project") {
+          const active = requireActive(switcher)
+          const db = openProjectDb(active.db_path)
+          try {
+            return jsonResult(
+              memorySearch(rootDb, {
+                query: args.query,
+                limit: args.limit,
+                category: args.category,
+                persona_id: args.persona_id,
+                scope,
+                projectDb: db,
+                projectName: active.name,
+                personaFilterMode: cfg.persona_filter_mode ?? "inclusive",
+              }),
+            )
+          } finally {
+            db.close()
+          }
+        }
+        // scope === "global" — no project DB needed.
+        return jsonResult(
+          memorySearch(rootDb, {
             query: args.query,
             limit: args.limit,
             category: args.category,
             persona_id: args.persona_id,
             scope,
+            personaFilterMode: cfg.persona_filter_mode ?? "inclusive",
           }),
         )
-        return jsonResult(result)
       } catch (err) {
         return textResult(`memory_search failed: ${(err as Error).message}`)
       }
@@ -204,26 +246,43 @@ export function registerMemoryTools(
     "memory_semantic_search",
     {
       description:
-        "Vector-only semantic search (cosine over candidate embeddings). scope='project' targets the active project; 'global' targets root.db.global_memories.",
+        "Vector-only semantic search (cosine over candidate embeddings). scope='all' (default) searches both DBs and tags results with source_db.",
       inputSchema: {
         query: z.string().min(1),
         top_k: z.number().int().min(1).max(100).optional(),
         category: z.string().optional(),
-        scope: z.enum(["project", "global"]).optional(),
+        scope: z.enum(["all", "project", "global"]).optional(),
       },
     },
     async (args) => {
-      const scope: Scope = args.scope ?? "project"
+      const scope: CrossDbScope = args.scope ?? "all"
       try {
-        const result = await withScopeDb(scope, switcher, rootDb, projectsRoot, (db) =>
-          memorySemanticSearch(db, {
+        if (scope === "all" || scope === "project") {
+          const active = requireActive(switcher)
+          const db = openProjectDb(active.db_path)
+          try {
+            return jsonResult(
+              memorySemanticSearch(rootDb, {
+                query: args.query,
+                top_k: args.top_k,
+                category: args.category,
+                scope,
+                projectDb: db,
+                projectName: active.name,
+              }),
+            )
+          } finally {
+            db.close()
+          }
+        }
+        return jsonResult(
+          memorySemanticSearch(rootDb, {
             query: args.query,
             top_k: args.top_k,
             category: args.category,
             scope,
           }),
         )
-        return jsonResult(result)
       } catch (err) {
         return textResult(`memory_semantic_search failed: ${(err as Error).message}`)
       }
@@ -235,20 +294,40 @@ export function registerMemoryTools(
     "memory_recent",
     {
       description:
-        "List the most recent memories in the target DB (created_at DESC). scope='project' targets the active project; 'global' targets root.db.global_memories.",
+        "List the most recent memories (created_at DESC). scope='all' (default) returns from both project + global, tagged with source_db.",
       inputSchema: {
         limit: z.number().int().min(1).max(100).optional(),
         channel: z.string().optional(),
-        scope: z.enum(["project", "global"]).optional(),
+        scope: z.enum(["all", "project", "global"]).optional(),
       },
     },
     async (args) => {
-      const scope: Scope = args.scope ?? "project"
+      const scope: CrossDbScope = args.scope ?? "all"
       try {
-        const result = await withScopeDb(scope, switcher, rootDb, projectsRoot, (db) =>
-          memoryRecent(db, { limit: args.limit, channel: args.channel, scope }),
+        if (scope === "all" || scope === "project") {
+          const active = requireActive(switcher)
+          const db = openProjectDb(active.db_path)
+          try {
+            return jsonResult(
+              memoryRecent(rootDb, {
+                limit: args.limit,
+                channel: args.channel,
+                scope,
+                projectDb: db,
+                projectName: active.name,
+              }),
+            )
+          } finally {
+            db.close()
+          }
+        }
+        return jsonResult(
+          memoryRecent(rootDb, {
+            limit: args.limit,
+            channel: args.channel,
+            scope,
+          }),
         )
-        return jsonResult(result)
       } catch (err) {
         return textResult(`memory_recent failed: ${(err as Error).message}`)
       }

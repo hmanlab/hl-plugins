@@ -18,9 +18,11 @@ export const DECAY_DAYS = 90
 export const DECAY_IMPORTANCE_THRESHOLD = 0.3
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** A single ranked candidate from a search source. */
+/** A single ranked candidate from a search source. `id` is opaque to the
+ *  ranker — callers can use numeric DB ids or string tags (e.g.
+ *  `${source}:${id}`) for cross-DB fusion. */
 export type RankedCandidate = {
-  id: number
+  id: number | string
   rank: number
 }
 
@@ -28,8 +30,8 @@ export type RankedCandidate = {
  * Fuse multiple rank lists into a single score map.
  *   score(d) = Σ_i  1/(k_const + rank_i)
  */
-export function rrfFusion(lists: RankedCandidate[][]): Map<number, number> {
-  const scores = new Map<number, number>()
+export function rrfFusion(lists: RankedCandidate[][]): Map<number | string, number> {
+  const scores = new Map<number | string, number>()
   for (const list of lists) {
     list.forEach((c, i) => {
       const rank = i + 1
@@ -47,13 +49,13 @@ export function rrfFusion(lists: RankedCandidate[][]): Map<number, number> {
  * Phase 05 replaces this with a configurable engine.
  */
 export function applyDecayPlaceholder(
-  scores: Map<number, number>,
-  rowsById: Map<number, { importance: number; last_accessed_at: number | null }>,
+  scores: Map<number | string, number>,
+  rowsById: Map<number | string, { importance: number; last_accessed_at: number | null }>,
   now = Date.now(),
-): Map<number, number> {
-  const out = new Map<number, number>()
+): Map<number | string, number> {
+  const out = new Map<number | string, number>()
   for (const [id, score] of scores) {
-    const row = rowsById.get(id)
+    const row = rowsById.get(id as number | string)
     if (!row) {
       out.set(id, score)
       continue

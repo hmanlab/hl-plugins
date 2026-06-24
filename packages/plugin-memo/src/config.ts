@@ -53,6 +53,7 @@ export type MemoConfig = {
   projects_dir?: string
   active_project?: string | null
   cwd_auto_detect?: boolean
+  persona_filter_mode?: "inclusive" | "strict"
   embedding_model: string
   embedding_dim: number
 }
@@ -64,6 +65,7 @@ export const DEFAULT_CONFIG: MemoConfig = {
   projects_dir: "~/.hmanlab/projects",
   active_project: null,
   cwd_auto_detect: false,
+  persona_filter_mode: "inclusive",
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2",
   embedding_dim: 384,
 }

@@ -1,5 +1,9 @@
 // Memory search tests: FTS keyword match, RRF fusion, recency, category
 // filter, persona filter (inclusive), global scope, perf smoke.
+//
+// Phase 04 update: memorySearch / memorySemanticSearch / memoryRecent now
+// accept a `rootDb` as the first arg + a `scope: "all" | "global" | "project"`
+// arg. Pass the project DB explicitly when searching a single project.
 
 import { describe, it, expect } from "bun:test"
 import { existsSync, mkdirSync } from "node:fs"
@@ -55,14 +59,21 @@ describe("memory_search (FTS keyword match)", () => {
           project_id: "ftmo",
         })
 
-        const result = memorySearch(db, {
-          query: "daily loss",
-          scope: "project",
-        })
-        expect(result.results.length).toBeGreaterThan(0)
-        expect(result.results[0]?.id).toBe(1)
-        expect(result.results[0]?.score).toBeGreaterThan(0)
-        expect(result.mode).toBe("fts") // vec0 not loaded in bun
+        const rootDb = openRootDb()
+        try {
+          const result = memorySearch(rootDb, {
+            query: "daily loss",
+            scope: "project",
+            projectDb: db,
+            projectName: "ftmo",
+          })
+          expect(result.results.length).toBeGreaterThan(0)
+          expect(result.results[0]?.id).toBe(1)
+          expect(result.results[0]?.score).toBeGreaterThan(0)
+          expect(result.mode).toBe("fts") // vec0 not loaded in bun
+        } finally {
+          rootDb.close()
+        }
       } finally {
         db.close()
       }
@@ -87,11 +98,18 @@ describe("memory_search (RRF fusion)", () => {
           scope: "project",
           project_id: "ftmo",
         })
-        const result = memorySearch(db, {
-          query: "FTMO daily loss",
-          scope: "project",
-        })
-        expect(result.results[0]?.id).toBe(1)
+        const rootDb = openRootDb()
+        try {
+          const result = memorySearch(rootDb, {
+            query: "FTMO daily loss",
+            scope: "project",
+            projectDb: db,
+            projectName: "ftmo",
+          })
+          expect(result.results[0]?.id).toBe(1)
+        } finally {
+          rootDb.close()
+        }
       } finally {
         db.close()
       }
@@ -105,13 +123,22 @@ describe("memory_recent", () => {
       const db = await newProjectDb("ftmo")
       try {
         memorySave(db, { content: "old", scope: "project", project_id: "ftmo" })
-        // Tiny delay so created_at differs.
         await new Promise((r) => setTimeout(r, 5))
         memorySave(db, { content: "new", scope: "project", project_id: "ftmo" })
 
-        const result = memoryRecent(db, { limit: 2, scope: "project" })
-        expect(result.results[0]?.id).toBe(2)
-        expect(result.results[1]?.id).toBe(1)
+        const rootDb = openRootDb()
+        try {
+          const result = memoryRecent(rootDb, {
+            limit: 2,
+            scope: "project",
+            projectDb: db,
+            projectName: "ftmo",
+          })
+          expect(result.results[0]?.id).toBe(2)
+          expect(result.results[1]?.id).toBe(1)
+        } finally {
+          rootDb.close()
+        }
       } finally {
         db.close()
       }
@@ -136,12 +163,19 @@ describe("category filter", () => {
           scope: "project",
           project_id: "ftmo",
         })
-        const result = memorySearch(db, {
-          query: "FTMO",
-          category: "rules",
-          scope: "project",
-        })
-        expect(result.results.every((r) => r.category === "rules")).toBe(true)
+        const rootDb = openRootDb()
+        try {
+          const result = memorySearch(rootDb, {
+            query: "FTMO",
+            category: "rules",
+            scope: "project",
+            projectDb: db,
+            projectName: "ftmo",
+          })
+          expect(result.results.every((r) => r.category === "rules")).toBe(true)
+        } finally {
+          rootDb.close()
+        }
       } finally {
         db.close()
       }
@@ -160,11 +194,7 @@ describe("persona filter (inclusive)", () => {
           scope: "project",
           project_id: "ftmo",
         })
-        // Clear persona_id to NULL on row 1 — the inclusive filter should
-        // still match it when searching for "trading".
         db.prepare("UPDATE memories SET persona_id = NULL WHERE id = 1").run()
-        // FTS5 mirror needs an UPDATE trigger to re-index; the manual UPDATE
-        // above doesn't fire it. Re-save the row so FTS5 sees the content.
         memorySave(db, {
           content: "shared insight no persona",
           scope: "project",
@@ -177,15 +207,21 @@ describe("persona filter (inclusive)", () => {
           scope: "project",
           project_id: "ftmo",
         })
-        const result = memorySearch(db, {
-          query: "insight",
-          persona_id: "trading",
-          scope: "project",
-        })
-        // trading's row (NULL persona after UPDATE) + the NULL-persona row.
-        expect(result.results.length).toBe(2)
-        const ids = result.results.map((r) => r.id).sort()
-        expect(ids).toEqual([1, 2])
+        const rootDb = openRootDb()
+        try {
+          const result = memorySearch(rootDb, {
+            query: "insight",
+            persona_id: "trading",
+            scope: "project",
+            projectDb: db,
+            projectName: "ftmo",
+          })
+          expect(result.results.length).toBe(2)
+          const ids = result.results.map((r) => r.id).sort()
+          expect(ids).toEqual([1, 2])
+        } finally {
+          rootDb.close()
+        }
       } finally {
         db.close()
       }
@@ -231,14 +267,20 @@ describe("memory_semantic_search", () => {
           scope: "project",
           project_id: "ftmo",
         })
-        const result = memorySemanticSearch(db, {
-          query: "risk threshold for prop firm",
-          top_k: 2,
-          scope: "project",
-        })
-        expect(result.results.length).toBeGreaterThan(0)
-        // Top hit should be the FTMO rule (shingle overlap).
-        expect(result.results[0]?.content).toContain("FTMO")
+        const rootDb = openRootDb()
+        try {
+          const result = memorySemanticSearch(rootDb, {
+            query: "risk threshold for prop firm",
+            top_k: 2,
+            scope: "project",
+            projectDb: db,
+            projectName: "ftmo",
+          })
+          expect(result.results.length).toBeGreaterThan(0)
+          expect(result.results[0]?.content).toContain("FTMO")
+        } finally {
+          rootDb.close()
+        }
       } finally {
         db.close()
       }

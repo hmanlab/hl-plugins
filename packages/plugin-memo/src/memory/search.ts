@@ -1,25 +1,20 @@
 // Memory search: hybrid (FTS5 + vector + recency), semantic-only, recency-only.
 //
-// All three paths run against a single DB (either the active project's
-// `hmanlab.db` or the root `root.db` for `scope="global"`). Cross-DB fusion
-// is Phase 04 territory.
+// Phase 04 adds cross-DB fusion: `scope="all"` searches both
+// `root.db.global_memories` AND the active project's `memories` table, tags
+// every row with `source_db`, and RRF-fuses across the union. Single-DB
+// scope values ("project", "global") keep Phase 03 behavior.
 //
 // Hybrid (memory_search):
 //   1. Embed the query (one vector for cosine KNN — best-effort, no-op if
 //      vec0 not loaded).
-//   2. FTS top-K: `SELECT id FROM <table>_fts WHERE <table>_fts MATCH ?`.
-//   3. Recency top-K: ORDER BY created_at DESC, importance DESC.
-//   4. Vector top-K: best-effort. In MVP bun:sqlite we can't run KNN without
-//      sqlite-vec, so we synthesize a top-K from the embedded query by
-//      scoring candidates via cosine similarity in JS over a candidate set
-//      pulled from the FTS + recency union. This preserves the "vector path
-//      exists" contract so Phase 06 (real embedder / sqlite-vec) is a clean
-//      swap.
-//   5. RRF fusion (k_const=60).
-//   6. Decay placeholder (90d / 0.3 importance → 0.5×).
-//   7. Category + persona filters (persona filter is inclusive: matches the
-//      given persona_id OR NULL).
-//   8. Sort by fused score DESC; take top `limit`.
+//   2. For each target DB, FTS top-K + recency top-K + vector top-K (best
+//      effort; JS-side cosine over the candidate union when vec0 not loaded).
+//   3. RRF fusion (k_const=60) across the union of all DBs.
+//   4. Decay placeholder (90d / 0.3 importance → 0.5×).
+//   5. Category + persona filters (persona filter is inclusive by default,
+//      strict mode opt-in via config.persona_filter_mode).
+//   6. Sort by fused score DESC; take top `limit`.
 
 import type { Database } from "bun:sqlite"
 import { cosineSimilarity, getEmbedder, type Embedding } from "../embedder.js"
@@ -27,7 +22,7 @@ import type { MemoryRow, Scope } from "./crud.js"
 import { applyDecayPlaceholder, rrfFusion, type RankedCandidate } from "./rank.js"
 import { vectorIndexAvailable } from "../project/schema.js"
 
-export type SearchResultRow = MemoryRow & { score: number }
+export type SearchResultRow = MemoryRow & { score?: number; source_db: string }
 
 export type SearchResponse = {
   results: SearchResultRow[]
@@ -38,8 +33,9 @@ export type SearchResponse = {
   mode: "fts" | "hybrid"
 }
 
+export type CrossDbScope = "all" | "global" | "project"
+
 const TOP_K = 20
-const DAY_MS = 24 * 60 * 60 * 1000
 
 function tableFor(scope: Scope): { row: string; fts: string } {
   return scope === "project"
@@ -49,7 +45,6 @@ function tableFor(scope: Scope): { row: string; fts: string } {
 
 /** Strip FTS5 special chars from a user query and quote each token. */
 function ftsQuery(raw: string): string {
-  // Split on whitespace, quote each token (FTS5 supports "..."). Strip empty.
   return raw
     .trim()
     .split(/\s+/)
@@ -82,11 +77,7 @@ function rowsById(rows: MemoryRow[]): Map<number, MemoryRow> {
   return m
 }
 
-/**
- * Pull a candidate set: union of FTS top-K + recency top-K. Up to 2*K
- * unique ids. Used by both hybrid (for the JS-side cosine scoring) and by
- * the FTS-only fallback.
- */
+/** Pull a candidate set per DB. Returns MemoryRow objects (no embedding). */
 function candidateSet(
   db: Database,
   scope: Scope,
@@ -119,23 +110,48 @@ function candidateSet(
   return out
 }
 
+type DbTarget = {
+  db: Database
+  scope: Scope
+  source: string // "global" or project name; used as source_db tag
+}
+
 /**
- * Hybrid search. Returns up to `limit` rows ordered by fused RRF score.
+ * Hybrid search. With `scope="all"`, searches both the active project's
+ * memories table AND root.db.global_memories in sequence, tags each row with
+ * `source_db`, and fuses with RRF.
  */
 export function memorySearch(
-  db: Database,
+  rootDb: Database,
   args: {
     query: string
     limit?: number
     category?: string
     persona_id?: string
-    scope: Scope
+    scope: CrossDbScope
+    /** Project DB + name when scope="all" or scope="project". Caller resolves. */
+    projectDb?: Database
+    projectName?: string | null
+    /** Persona filter mode. Default: "inclusive". */
+    personaFilterMode?: "inclusive" | "strict"
   },
 ): SearchResponse {
   const t0 = performance.now()
   const limit = args.limit ?? 10
   const scope = args.scope
-  const { row } = tableFor(scope)
+  const personaMode = args.personaFilterMode ?? "inclusive"
+
+  const targets: DbTarget[] = []
+  if (scope === "global" || scope === "all") {
+    targets.push({ db: rootDb, scope: "global", source: "global" })
+  }
+  if ((scope === "project" || scope === "all") && args.projectDb) {
+    targets.push({
+      db: args.projectDb,
+      scope: "project",
+      source: args.projectName ?? "project",
+    })
+  }
 
   const embedder = getEmbedder()
   const embedStart = performance.now()
@@ -143,69 +159,87 @@ export function memorySearch(
   const embedMs = performance.now() - embedStart
 
   const ftsQ = ftsQuery(args.query)
-  const candidates = candidateSet(db, scope, ftsQ, TOP_K)
+  const mode = vectorIndexAvailable(targets[0]?.db ?? rootDb) && qVec.length > 0 ? "hybrid" : "fts"
 
-  const mode = vectorIndexAvailable(db) && qVec.length > 0 ? "hybrid" : "fts"
+  const allCandidates: Array<MemoryRow & { source_db: string }> = []
+  const allFtsLists: RankedCandidate[] = []
+  const allRecencyLists: RankedCandidate[] = []
+  const allVectorLists: RankedCandidate[] = []
 
-  // Build the three rank lists.
-  const ftsList: RankedCandidate[] = candidates
-    .filter((c) => ftsQ.length > 0)
-    .slice(0, TOP_K)
-    .map((c, i) => ({ id: c.id, rank: i + 1 }))
+  for (const target of targets) {
+    const cands = candidateSet(target.db, target.scope, ftsQ, TOP_K)
+    for (const c of cands) allCandidates.push({ ...c, source_db: target.source })
 
-  const recencyList: RankedCandidate[] = candidates
-    .slice(0, TOP_K)
-    .map((c, i) => ({ id: c.id, rank: i + 1 }))
-
-  let vectorList: RankedCandidate[] = []
-  if (mode === "hybrid") {
-    // JS-side cosine scoring over candidates. Real KNN happens when
-    // sqlite-vec is loaded (Phase 06 / future swap).
-    const scored = candidates.map((c, idx) => {
-      const cVec = c.embedding ? readEmbedding(c.embedding as ArrayBuffer) : null
-      const sim = cVec ? cosineSimilarity(qVec, cVec) : 0
-      return { id: c.id, idx, sim }
-    })
-    scored.sort((a, b) => b.sim - a.sim)
-    vectorList = scored.slice(0, TOP_K).map((s) => ({ id: s.id, rank: 0 })) // rank filled below
-    vectorList.forEach((c, i) => (c.rank = i + 1))
+    allFtsLists.push(
+      ...cands
+        .filter((c) => ftsQ.length > 0)
+        .slice(0, TOP_K)
+        .map((c, i) => ({ id: taggedId(target.source, c.id), rank: i + 1 })),
+    )
+    allRecencyLists.push(
+      ...cands.slice(0, TOP_K).map((c, i) => ({
+        id: taggedId(target.source, c.id),
+        rank: i + 1,
+      })),
+    )
+    if (mode === "hybrid") {
+      const scored = cands.map((c) => {
+        const cVec = c.embedding ? readEmbedding(c.embedding as ArrayBuffer) : null
+        const sim = cVec ? cosineSimilarity(qVec, cVec) : 0
+        return { id: c.id, sim }
+      })
+      scored.sort((a, b) => b.sim - a.sim)
+      scored.slice(0, TOP_K).forEach((s, i) => {
+        allVectorLists.push({ id: taggedId(target.source, s.id), rank: i + 1 })
+      })
+    }
   }
 
-  let fused = rrfFusion([ftsList, recencyList, vectorList])
+  // RRF tag-aware fusion. Map tagged id → MemoryRow.
+  const taggedRowMap = new Map<string, MemoryRow & { source_db: string }>()
+  for (const c of allCandidates) {
+    taggedRowMap.set(taggedId(c.source_db, c.id), c)
+  }
+
+  let fused = rrfFusion([allFtsLists, allRecencyLists, allVectorLists])
   fused = applyDecayPlaceholder(
     fused,
     new Map(
-      candidates.map((c) => [
-        c.id,
+      allCandidates.map((c) => [
+        taggedId(c.source_db, c.id),
         { importance: c.importance, last_accessed_at: c.last_accessed_at },
       ]),
     ),
   )
 
-  // Apply filters.
-  let filtered = candidates
+  // Apply filters on the candidate set.
+  let filtered = allCandidates
   if (args.category) {
     filtered = filtered.filter((c) => c.category === args.category)
   }
   if (args.persona_id) {
-    // Inclusive: match the persona OR NULL.
-    filtered = filtered.filter(
-      (c) => c.persona_id === args.persona_id || c.persona_id === null,
-    )
+    filtered = filtered.filter((c) => {
+      if (personaMode === "strict") return c.persona_id === args.persona_id
+      // inclusive: match persona OR NULL
+      return c.persona_id === args.persona_id || c.persona_id === null
+    })
   }
 
-  const byId = rowsById(filtered)
+  const filteredIds = new Set(filtered.map((c) => taggedId(c.source_db, c.id)))
   const results: SearchResultRow[] = []
-  for (const [id, score] of [...fused.entries()].sort((a, b) => b[1] - a[1])) {
-    const r = byId.get(id)
-    if (!r) continue
-    results.push({ ...r, score: Math.round(score * 10000) / 10000 })
+  for (const [tid, score] of [...fused.entries()].sort((a, b) => b[1] - a[1])) {
+    const tagKey = String(tid)
+    if (!filteredIds.has(tagKey)) continue
+    const c = taggedRowMap.get(tagKey)
+    if (!c) continue
+    const { source_db: _source, ...rest } = c
+    results.push({ ...rest, source_db: c.source_db, score: Math.round(score * 10000) / 10000 })
     if (results.length >= limit) break
   }
 
   return {
     results,
-    total_candidates: candidates.length,
+    total_candidates: allCandidates.length,
     embed_ms: Math.round(embedMs * 100) / 100,
     search_ms: Math.round((performance.now() - t0) * 100) / 100,
     mode,
@@ -213,15 +247,27 @@ export function memorySearch(
 }
 
 /**
- * Vector-only semantic search. Cosine similarity across the FULL memory pool
- * (not just FTS+recency candidates) — otherwise a query with no keyword
- * overlap returns nothing. Top-K by descending similarity. When sqlite-vec
- * is loaded, this becomes a true KNN; until then we score in JS over the
- * full set.
+ * Compose a tagged key so two DBs with overlapping id sequences don't collide
+ * in the RRF map. Format: `${source}:${id}`.
+ */
+function taggedId(source: string, id: number): string {
+  return `${source}:${id}`
+}
+
+/**
+ * Vector-only semantic search. MVP path is cosine over the full pool. Cross-DB
+ * with `scope="all"` concatenates global + project pools.
  */
 export function memorySemanticSearch(
-  db: Database,
-  args: { query: string; top_k?: number; scope: Scope; category?: string },
+  rootDb: Database,
+  args: {
+    query: string
+    top_k?: number
+    scope: CrossDbScope
+    category?: string
+    projectDb?: Database
+    projectName?: string | null
+  },
 ): SearchResponse {
   const t0 = performance.now()
   const topK = args.top_k ?? 10
@@ -232,71 +278,108 @@ export function memorySemanticSearch(
   const qVec = embedder.embed(args.query)
   const embedMs = performance.now() - embedStart
 
-  const { row } = tableFor(scope)
-  // Pull the full pool (or category-filtered slice). Embedding read happens
-  // in JS over Float32Arrays.
-  const sql = args.category
-    ? `SELECT * FROM ${row} WHERE category = ?`
-    : `SELECT * FROM ${row}`
-  const allRows = (args.category
-    ? db.prepare(sql).all(args.category)
-    : db.prepare(sql).all()) as Array<Record<string, unknown>>
-  const pool = allRows.map(rowFromRecord)
+  const targets: DbTarget[] = []
+  if (scope === "global" || scope === "all") {
+    targets.push({ db: rootDb, scope: "global", source: "global" })
+  }
+  if ((scope === "project" || scope === "all") && args.projectDb) {
+    targets.push({
+      db: args.projectDb,
+      scope: "project",
+      source: args.projectName ?? "project",
+    })
+  }
 
-  const mode = vectorIndexAvailable(db) ? "hybrid" : "fts"
+  const mode = vectorIndexAvailable(targets[0]?.db ?? rootDb) ? "hybrid" : "fts"
+  const allCandidates: Array<MemoryRow & { source_db: string }> = []
+  for (const target of targets) {
+    const { row } = tableFor(target.scope)
+    const sql = args.category
+      ? `SELECT * FROM ${row} WHERE category = ?`
+      : `SELECT * FROM ${row}`
+    const rows = (args.category
+      ? target.db.prepare(sql).all(args.category)
+      : target.db.prepare(sql).all()) as Array<Record<string, unknown>>
+    for (const r of rows) allCandidates.push({ ...rowFromRecord(r), source_db: target.source })
+  }
 
-  const scored = pool.map((c) => {
+  const scored = allCandidates.map((c) => {
     const cVec = c.embedding ? readEmbedding(c.embedding as ArrayBuffer) : null
     const sim = cVec ? cosineSimilarity(qVec, cVec) : 0
     return { row: c, sim }
   })
   scored.sort((a, b) => b.sim - a.sim)
 
-  const results: SearchResultRow[] = scored.slice(0, topK).map((s) => ({
-    ...s.row,
-    score: Math.round(s.sim * 10000) / 10000,
-  }))
+  const results: SearchResultRow[] = scored.slice(0, topK).map((s) => {
+    const { source_db, ...rest } = s.row
+    return { ...rest, source_db: s.row.source_db, score: Math.round(s.sim * 10000) / 10000 }
+  })
 
   return {
     results,
-    total_candidates: pool.length,
+    total_candidates: allCandidates.length,
     embed_ms: Math.round(embedMs * 100) / 100,
     search_ms: Math.round((performance.now() - t0) * 100) / 100,
     mode,
   }
 }
 
-/** Recency-only listing. */
+/** Recency-only listing with optional channel filter. */
 export function memoryRecent(
-  db: Database,
-  args: { limit?: number; scope: Scope; channel?: string },
-): { results: MemoryRow[]; search_ms: number } {
+  rootDb: Database,
+  args: {
+    limit?: number
+    scope: CrossDbScope
+    channel?: string
+    projectDb?: Database
+    projectName?: string | null
+  },
+): { results: SearchResultRow[]; search_ms: number } {
   const t0 = performance.now()
   const limit = args.limit ?? 10
-  const { row } = tableFor(args.scope)
-  const where: string[] = []
-  const params: (string | number)[] = []
-  if (args.channel) {
-    where.push("channel = ?")
-    params.push(args.channel)
+  const scope = args.scope
+
+  const targets: DbTarget[] = []
+  if (scope === "global" || scope === "all") {
+    targets.push({ db: rootDb, scope: "global", source: "global" })
   }
-  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
-  const rows = (params.length > 0
-    ? db
-        .prepare(
-          `SELECT * FROM ${row} ${whereClause} ORDER BY created_at DESC, id DESC LIMIT ?`,
-        )
-        .all(...params, limit)
-    : db
-        .prepare(`SELECT * FROM ${row} ORDER BY created_at DESC, id DESC LIMIT ?`)
-        .all(limit)) as Array<Record<string, unknown>>
+  if ((scope === "project" || scope === "all") && args.projectDb) {
+    targets.push({
+      db: args.projectDb,
+      scope: "project",
+      source: args.projectName ?? "project",
+    })
+  }
+
+  type RowWithSource = MemoryRow & { source_db: string }
+  const all: RowWithSource[] = []
+  for (const target of targets) {
+    const { row } = tableFor(target.scope)
+    const where: string[] = []
+    const params: (string | number)[] = []
+    if (args.channel) {
+      where.push("channel = ?")
+      params.push(args.channel)
+    }
+    const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
+    const sql = `SELECT * FROM ${row} ${whereClause} ORDER BY created_at DESC, id DESC LIMIT ?`
+    const rows = (params.length > 0
+      ? target.db.prepare(sql).all(...params, limit)
+      : target.db.prepare(sql).all(limit)) as Array<Record<string, unknown>>
+    for (const r of rows) all.push({ ...rowFromRecord(r), source_db: target.source })
+  }
+  all.sort((a, b) => b.created_at - a.created_at)
+
+  const results: SearchResultRow[] = all.slice(0, limit).map((c) => {
+    const { source_db: _s, ...rest } = c
+    return { ...rest, source_db: c.source_db }
+  })
   return {
-    results: rows.map(rowFromRecord),
+    results,
     search_ms: Math.round((performance.now() - t0) * 100) / 100,
   }
 }
 
-// Helper: read the BLOB back to Float32Array view.
 function readEmbedding(buf: ArrayBuffer | Uint8Array): Embedding {
   const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
   return new Float32Array(u8.buffer, u8.byteOffset, u8.byteLength / 4)

@@ -26,6 +26,7 @@ import {
   type ProjectSwitcher,
   requireActive,
 } from "../project/switcher.js"
+import type { SessionManager } from "../sessions/manager.js"
 import { textResult, jsonResult } from "./persona-tools.js"
 
 export { requireActive, NoActiveProjectError }
@@ -35,6 +36,7 @@ export function registerProjectTools(
   rootDb: Database,
   switcher: ProjectSwitcher,
   getProjectsRoot: () => string,
+  sessions?: SessionManager,
 ): void {
   // ─── project_register ──────────────────────────────────────────────────
   server.registerTool(
@@ -130,13 +132,20 @@ export function registerProjectTools(
     async (args) => {
       try {
         const active = switcher.switchTo(args.name)
-        return jsonResult({
+        // Backward-compatible shape — old fields stay at the top level;
+        // new bundle fields are added when sessions is wired.
+        const base = {
           name: active.name,
           channels: active.yaml.channels,
           decay_policy: active.yaml.decay_policy,
           default_persona: active.yaml.default_persona,
           stats: { memory_count: memoryCount(active.db_path) },
-        })
+        }
+        if (sessions) {
+          const bundle = await sessions.start()
+          return jsonResult({ ...base, ...bundle })
+        }
+        return jsonResult(base)
       } catch (err) {
         return textResult(`project_switch failed: ${(err as Error).message}`)
       }
@@ -154,13 +163,14 @@ export function registerProjectTools(
     async () => {
       const active = switcher.getActive()
       if (!active) return jsonResult({ active: null })
-      return jsonResult({
+      const base = {
         name: active.name,
         channels: active.yaml.channels,
         decay_policy: active.yaml.decay_policy,
         default_persona: active.yaml.default_persona,
         stats: { memory_count: memoryCount(active.db_path) },
-      })
+      }
+      return jsonResult(base)
     },
   )
 
