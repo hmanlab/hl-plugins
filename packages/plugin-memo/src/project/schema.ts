@@ -84,6 +84,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0(
  */
 export function bootstrapProjectSchema(db: import("bun:sqlite").Database): void {
   db.exec(PROJECT_SCHEMA)
+  // Phase 05 migrations: must run AFTER schema creation. Idempotent —
+  // duplicate column errors are swallowed. Lazy-import to avoid a cycle
+  // (db.ts → schema.ts → db.ts).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { applyMigrations, projectMigrations } = require("../db.js") as {
+    applyMigrations: (db: import("bun:sqlite").Database, m: ReadonlyArray<string>) => void
+    projectMigrations: ReadonlyArray<string>
+  }
+  applyMigrations(db, projectMigrations)
   try {
     db.exec(PROJECT_VECTOR_SCHEMA)
   } catch (err) {

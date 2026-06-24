@@ -16,13 +16,26 @@ import { openProjectDb } from "../db.js"
 import { readConfig } from "../config.js"
 import { textResult, jsonResult } from "./persona-tools.js"
 import { requireActive } from "./project-tools.js"
-import { memoryDelete, memoryGet, memorySave, memoryUpdate, type Scope } from "../memory/crud.js"
+import {
+  memoryArchive,
+  memoryDelete,
+  memoryGet,
+  memoryPromote,
+  memoryPromoteToGlobal,
+  memorySave,
+  memorySupersede,
+  memoryUpdate,
+  type Scope,
+} from "../memory/crud.js"
 import {
   memoryRecent,
   memorySearch,
   memorySemanticSearch,
   type CrossDbScope,
 } from "../memory/search.js"
+import { detectConflict } from "../conflict/detector.js"
+import { getEmbedder } from "../embedder.js"
+import { buildHygieneReport, type HygieneReport } from "../memory/hygiene.js"
 
 /** Open the active project's DB and pass it to fn. Used by scope="project"
  *  and scope="all" — the latter also passes rootDb alongside. */
@@ -54,7 +67,7 @@ export function registerMemoryTools(
     "memory_save",
     {
       description:
-        "Save a memory. Embeds the content (lazy-loads the embedder on first call) and inserts into the active project's memories table, or root.db.global_memories when scope='global'. FTS5 sync is automatic via triggers. Returns {id, scope, embedding_dim, embed_ms, save_ms}.",
+        "Save a memory. Embeds the content (lazy-loads the embedder on first call) and inserts into the active project's memories table, or root.db.global_memories when scope='global'. FTS5 sync is automatic via triggers. Phase 05: scans for similar + opposite-polarity memories in the same category; if found, returns {status:'conflict', existing, suggestion, similarity} instead of inserting. Pass force=true to bypass the conflict check.",
       inputSchema: {
         content: z.string().min(1).describe("The memory text."),
         category: z.string().optional(),
@@ -62,34 +75,66 @@ export function registerMemoryTools(
         importance: z.number().min(0).max(1).optional(),
         persona_id: z.string().optional(),
         scope: z.enum(["project", "global"]).optional(),
+        force: z
+          .boolean()
+          .optional()
+          .describe("If true, skip the conflict check and insert even if a conflict is detected."),
       },
     },
     async (args) => {
       const scope: Scope = args.scope ?? "project"
       try {
-        const result =
-          scope === "project"
-            ? await withProjectDb(switcher, (db, projectName) =>
-                Promise.resolve(
-                  memorySave(db, {
-                    content: args.content,
-                    category: args.category ?? null,
-                    channel: args.channel ?? null,
-                    importance: args.importance ?? 0.5,
-                    persona_id: args.persona_id ?? "default",
-                    scope: "project",
-                    project_id: projectName,
-                  }),
-                ),
+        // Conflict detection (Phase 05): embed the new content, scan the
+        // target DB for similar + opposite-polarity memories in the same
+        // category, return a conflict report if found (unless force=true).
+        const embedder = getEmbedder()
+        const newVec = embedder.embed(args.content)
+
+        const runSave = async (
+          db: Database,
+          projectName: string | null,
+        ): Promise<unknown> => {
+          if (!args.force) {
+            const candidates = db
+              .prepare(
+                `SELECT id, content, category, importance, created_at, embedding
+                   FROM ${scope === "project" ? "memories" : "global_memories"}
+                  WHERE is_archived = 0`,
               )
-            : memorySave(rootDb, {
+              .all() as Array<{
+              id: number
+              content: string
+              category: string | null
+              importance: number
+              created_at: number
+              embedding: ArrayBuffer | Uint8Array | null
+            }>
+            const conflict = detectConflict(
+              candidates,
+              {
                 content: args.content,
                 category: args.category ?? null,
-                channel: args.channel ?? null,
-                importance: args.importance ?? 0.5,
-                persona_id: args.persona_id ?? "default",
-                scope: "global",
-              })
+                embedding: newVec,
+              },
+              0.85,
+            )
+            if (conflict) return conflict
+          }
+          return memorySave(db, {
+            content: args.content,
+            category: args.category ?? null,
+            channel: args.channel ?? null,
+            importance: args.importance ?? 0.5,
+            persona_id: args.persona_id ?? "default",
+            scope,
+            project_id: projectName ?? undefined,
+          })
+        }
+
+        const result =
+          scope === "project"
+            ? await withProjectDb(switcher, (db, projectName) => runSave(db, projectName))
+            : await runSave(rootDb, null)
         return jsonResult(result)
       } catch (err) {
         return textResult(`memory_save failed: ${(err as Error).message}`)
@@ -330,6 +375,156 @@ export function registerMemoryTools(
         )
       } catch (err) {
         return textResult(`memory_recent failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_supersede ──────────────────────────────────────────────────
+  server.registerTool(
+    "memory_supersede",
+    {
+      description:
+        "Mark old_id as superseded by new_id. The old memory becomes read-only (memory_update on it returns an error pointing to the canonical successor). Both must exist in the same scope.",
+      inputSchema: {
+        old_id: z.number().int().positive().describe("Id of the memory being superseded."),
+        new_id: z.number().int().positive().describe("Id of the canonical replacement."),
+        scope: z.enum(["project", "global"]).optional(),
+      },
+    },
+    async (args) => {
+      const scope: Scope = args.scope ?? "project"
+      try {
+        if (scope === "project") {
+          await withProjectDb(switcher, (db) => {
+            memorySupersede(db, args.old_id, args.new_id, "project")
+          })
+        } else {
+          memorySupersede(rootDb, args.old_id, args.new_id, "global")
+        }
+        return jsonResult({ superseded: args.old_id, by: args.new_id, scope })
+      } catch (err) {
+        return textResult(`memory_supersede failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_promote ────────────────────────────────────────────────────
+  server.registerTool(
+    "memory_promote",
+    {
+      description:
+        "Pin a memory (set is_pinned = 1) so the decay engine leaves it alone. Use for durable rules that should never lose importance over time.",
+      inputSchema: {
+        id: z.number().int().positive().describe("Memory id."),
+        scope: z.enum(["project", "global"]).optional(),
+      },
+    },
+    async (args) => {
+      const scope: Scope = args.scope ?? "project"
+      try {
+        if (scope === "project") {
+          await withProjectDb(switcher, (db) => {
+            memoryPromote(db, args.id, "project")
+          })
+        } else {
+          memoryPromote(rootDb, args.id, "global")
+        }
+        return jsonResult({ promoted: args.id, scope })
+      } catch (err) {
+        return textResult(`memory_promote failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_promote_to_global ──────────────────────────────────────────
+  server.registerTool(
+    "memory_promote_to_global",
+    {
+      description:
+        "Move a project memory into root.db.global_memories and remove it from the project DB. The new global memory has a fresh id; the old id is returned for reference. Requires an active project (memory lives in project scope).",
+      inputSchema: {
+        id: z.number().int().positive().describe("Memory id in the active project."),
+      },
+    },
+    async (args) => {
+      try {
+        const result = await withProjectDb(switcher, (projectDb) => {
+          return Promise.resolve(memoryPromoteToGlobal(projectDb, rootDb, args.id))
+        })
+        return jsonResult(result)
+      } catch (err) {
+        return textResult(`memory_promote_to_global failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_archive ────────────────────────────────────────────────────
+  server.registerTool(
+    "memory_archive",
+    {
+      description:
+        "Bulk soft-delete: set is_archived = 1 on the given ids. Archived memories are excluded from default search but still readable via memory_get.",
+      inputSchema: {
+        ids: z.array(z.number().int().positive()).min(1).describe("Ids to archive."),
+        scope: z.enum(["project", "global"]).optional(),
+      },
+    },
+    async (args) => {
+      const scope: Scope = args.scope ?? "project"
+      try {
+        const archived =
+          scope === "project"
+            ? await withProjectDb(switcher, (db) =>
+                Promise.resolve(memoryArchive(db, args.ids, "project")),
+              )
+            : memoryArchive(rootDb, args.ids, "global")
+        return jsonResult({ archived, requested: args.ids.length })
+      } catch (err) {
+        return textResult(`memory_archive failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_hygiene ────────────────────────────────────────────────────
+  server.registerTool(
+    "memory_hygiene",
+    {
+      description:
+        "Run a health report on memories. Scans for stale, conflicts, cold, expired, and duplicates. Persists is_cold / is_expired flags as a side-effect. scope='project' (default) targets the active project; 'global' targets root.db.global_memories; 'all' covers both.",
+      inputSchema: {
+        scope: z.enum(["all", "project", "global"]).optional(),
+      },
+    },
+    async (args) => {
+      const scope = (args.scope ?? "project") as "all" | "project" | "global"
+      try {
+        let projectDb: Database | null = null
+        let projectName: string | null = null
+        if (scope === "project" || scope === "all") {
+          const active = switcher.getActive()
+          if (!active) {
+            return textResult(
+              'no active project — call project_switch("<name>") first, or pass scope="global"',
+            )
+          }
+          projectDb = openProjectDb(active.db_path)
+          projectName = active.name
+        }
+        let report: HygieneReport
+        try {
+          report = await buildHygieneReport({
+            rootDb,
+            projectDb,
+            projectName,
+            projectsRoot: projectsRoot,
+            scope,
+          })
+        } finally {
+          if (projectDb) projectDb.close()
+        }
+        return jsonResult(report)
+      } catch (err) {
+        return textResult(`memory_hygiene failed: ${(err as Error).message}`)
       }
     },
   )

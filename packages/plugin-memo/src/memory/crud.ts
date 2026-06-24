@@ -198,7 +198,9 @@ export type UpdateResult = {
   update_ms: number
 }
 
-/** Patch a memory. Re-embeds + reindexes vec0 if content changes. */
+/** Patch a memory. Re-embeds + reindexes vec0 if content changes.
+ *  Refuses to update a row that's been superseded (PRD §20 Q4: superseded
+ *  memories are read-only — point the caller at the canonical successor). */
 export function memoryUpdate(
   db: Database,
   id: number,
@@ -210,6 +212,12 @@ export function memoryUpdate(
     .prepare(`SELECT * FROM ${table} WHERE id = ?`)
     .get(id) as Record<string, unknown> | undefined
   if (!existing) throw new Error(`Memory ${id} not found in ${scope}`)
+  if ((existing["superseded_by"] as number | null) !== null) {
+    throw new Error(
+      `memory ${id} is superseded by ${existing["superseded_by"]}; ` +
+        `update the canonical memory instead`,
+    )
+  }
 
   const t0 = performance.now()
   const now = Date.now()
@@ -271,4 +279,209 @@ export function memoryDelete(db: Database, id: number, scope: Scope): void {
   if (vectorIndexAvailable(db)) {
     deleteVector(db, vecTableFor(scope), id)
   }
+}
+
+// ─── Phase 05 lifecycle ─────────────────────────────────────────────────
+
+/**
+ * Set `old.superseded_by = newId`. The old memory becomes read-only —
+ * subsequent `memory_update` on it returns a clear error pointing to the
+ * canonical successor. Both ids must exist in the same scope.
+ */
+export function memorySupersede(
+  db: Database,
+  oldId: number,
+  newId: number,
+  scope: Scope,
+): void {
+  const table = tableFor(scope)
+  const old = db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(oldId)
+  if (!old) throw new Error(`Memory ${oldId} not found in ${scope}`)
+  const newRow = db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(newId)
+  if (!newRow) throw new Error(`Memory ${newId} not found in ${scope}`)
+  db.prepare(`UPDATE ${table} SET superseded_by = ?, updated_at = ? WHERE id = ?`).run(
+    newId,
+    Date.now(),
+    oldId,
+  )
+}
+
+/** Pin a memory against decay. Sets `is_pinned = 1`. */
+export function memoryPromote(db: Database, id: number, scope: Scope): void {
+  const table = tableFor(scope)
+  const existing = db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(id)
+  if (!existing) throw new Error(`Memory ${id} not found in ${scope}`)
+  db.prepare(`UPDATE ${table} SET is_pinned = 1, updated_at = ? WHERE id = ?`).run(
+    Date.now(),
+    id,
+  )
+}
+
+/** Bulk soft delete. Sets `is_archived = 1`. Memories stay readable via
+ *  `memory_get` but are excluded from default search. */
+export function memoryArchive(db: Database, ids: number[], scope: Scope): number {
+  const table = tableFor(scope)
+  const stmt = db.prepare(`UPDATE ${table} SET is_archived = 1, updated_at = ? WHERE id = ?`)
+  let n = 0
+  for (const id of ids) {
+    const r = stmt.run(Date.now(), id)
+    if ((r as { changes: number }).changes > 0) n++
+  }
+  return n
+}
+
+/**
+ * Move a project memory into `root.db.global_memories` and delete it from the
+ * project DB. Returns the new global id. Throws if the source isn't in the
+ * project scope or doesn't exist.
+ */
+export function memoryPromoteToGlobal(
+  projectDb: Database,
+  rootDb: Database,
+  id: number,
+): { old_id: number; new_global_id: number; scope: "global" } {
+  const row = projectDb
+    .prepare(`SELECT * FROM memories WHERE id = ? AND is_archived = 0`)
+    .get(id) as Record<string, unknown> | undefined
+  if (!row) throw new Error(`Memory ${id} not found in project (or is archived)`)
+
+  // Copy into global_memories. Embedding is content-based and deterministic
+  // — we copy the existing BLOB instead of re-embedding.
+  const now = Date.now()
+  const embedding = row["embedding"] as ArrayBuffer | Uint8Array | null
+  const embeddingBlob = embedding ? new Uint8Array(
+    embedding instanceof Uint8Array ? embedding : new Uint8Array(embedding),
+  ) : null
+  const insertResult = rootDb
+    .prepare(
+      `INSERT INTO global_memories
+         (content, category, channel, persona_id, importance,
+          access_count, last_accessed_at, superseded_by,
+          is_cold, is_expired, is_pinned, is_archived, expires_at,
+          created_at, updated_at, embedding)
+       VALUES
+         (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING id`,
+    )
+    .get(
+      row["content"] as string,
+      row["category"] as string | null,
+      row["channel"] as string | null,
+      row["persona_id"] as string | null,
+      row["importance"] as number,
+      row["access_count"] as number,
+      row["last_accessed_at"] as number | null,
+      row["superseded_by"] as number | null,
+      row["is_cold"] as number,
+      row["is_expired"] as number,
+      row["is_pinned"] as number,
+      0,
+      row["expires_at"] as number | null,
+      row["created_at"] as number,
+      now,
+      embeddingBlob,
+    ) as { id: number }
+
+  // Delete from project DB.
+  projectDb.prepare(`DELETE FROM memories WHERE id = ?`).run(id)
+  if (vectorIndexAvailable(projectDb)) {
+    deleteVector(projectDb, "memory_vectors", id)
+  }
+
+  return { old_id: id, new_global_id: insertResult.id, scope: "global" }
+}
+
+/**
+ * Returns the raw row plus the new columns from the Phase 05 schema.
+ * Used by memory_hygiene to enumerate candidate rows.
+ */
+export function readRowForDecay(
+  db: Database,
+  id: number,
+  scope: Scope,
+): Record<string, unknown> | null {
+  const table = tableFor(scope)
+  const row = db
+    .prepare(`SELECT * FROM ${table} WHERE id = ?`)
+    .get(id) as Record<string, unknown> | null
+  return row
+}
+
+/**
+ * Pull all non-archived memories from a DB for hygiene scanning. Returns a
+ * shape that maps cleanly to the decay engine's `DecayRow`.
+ */
+export function readAllForHygiene(
+  db: Database,
+  scope: Scope,
+): Array<{
+  id: number
+  created_at: number
+  last_accessed_at: number | null
+  importance: number
+  access_count: number
+  is_pinned: number
+  is_expired: number | null
+  is_cold: number
+  is_archived: number
+  expires_at: number | null
+  category: string | null
+  content: string
+}> {
+  const table = tableFor(scope)
+  const rows = db
+    .prepare(`SELECT id, created_at, last_accessed_at, importance, access_count,
+                     is_pinned, is_expired, is_cold, is_archived, expires_at,
+                     category, content
+              FROM ${table}
+              WHERE is_archived = 0
+              ORDER BY id`)
+    .all() as Array<Record<string, unknown>>
+  return rows.map((r) => ({
+    id: r["id"] as number,
+    created_at: r["created_at"] as number,
+    last_accessed_at: (r["last_accessed_at"] as number | null) ?? null,
+    importance: r["importance"] as number,
+    access_count: r["access_count"] as number,
+    is_pinned: r["is_pinned"] as number,
+    is_expired: (r["is_expired"] as number) ?? 0,
+    is_cold: (r["is_cold"] as number) ?? 0,
+    is_archived: (r["is_archived"] as number) ?? 0,
+    expires_at: (r["expires_at"] as number | null) ?? null,
+    category: (r["category"] as string | null) ?? null,
+    content: r["content"] as string,
+  }))
+}
+
+/**
+ * Persist `is_cold` and `is_expired` flags as a hygiene side-effect.
+ */
+export function writeDecayFlags(
+  db: Database,
+  scope: Scope,
+  updates: Array<{ id: number; is_cold?: number; is_expired?: number; is_archived?: number }>,
+): void {
+  if (updates.length === 0) return
+  const table = tableFor(scope)
+  const stmt = db.prepare(
+    `UPDATE ${table}
+       SET is_cold = COALESCE($is_cold, is_cold),
+           is_expired = COALESCE($is_expired, is_expired),
+           is_archived = COALESCE($is_archived, is_archived)
+     WHERE id = $id`,
+  )
+  const now = Date.now()
+  for (const u of updates) {
+    stmt.run({
+      $is_cold: u.is_cold ?? null,
+      $is_expired: u.is_expired ?? null,
+      $is_archived: u.is_archived ?? null,
+      $id: u.id,
+    })
+  }
+  // Bump updated_at in a second pass — COALESCE doesn't compose for time.
+  db.prepare(`UPDATE ${table} SET updated_at = ? WHERE id IN (${updates.map(() => "?").join(",")})`).run(
+    now,
+    ...updates.map((u) => u.id),
+  )
 }

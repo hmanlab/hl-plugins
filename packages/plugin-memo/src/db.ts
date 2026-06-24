@@ -125,6 +125,7 @@ export function openRootDb(): Database {
   db.exec("PRAGMA synchronous = NORMAL;")
   db.exec(SCHEMA)
   ensureUserPersonaSingleton(db)
+  applyMigrations(db, globalMigrations)
   assertWal(db)
   return db
 }
@@ -187,7 +188,55 @@ export function openProjectDb(path: string): Database {
   db.exec("PRAGMA journal_mode = WAL;")
   db.exec("PRAGMA foreign_keys = ON;")
   db.exec("PRAGMA synchronous = NORMAL;")
+  // Apply the full project schema (memories + FTS5 + project_sessions +
+  // Phase 05 decay columns + best-effort vec0). Idempotent; safe to call on
+  // every open. Lazy-imported to avoid a circular dep with schema.ts.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { bootstrapProjectSchema } = require("./project/schema.js") as {
+    bootstrapProjectSchema: (db: Database) => void
+  }
+  bootstrapProjectSchema(db)
   return db
+}
+
+/**
+ * Phase 05 schema migrations. Each row is an idempotent `ALTER TABLE ... ADD
+ * COLUMN` — running on a DB that already has the column raises a SQLite
+ * error ("duplicate column name") which we swallow. Migrations run on every
+ * server boot via `openRootDb()` + `openProjectDb()`.
+ *
+ * `globalMigrations` apply to the root DB (global_memories table only).
+ * `projectMigrations` apply to project DBs (memories table only).
+ */
+export const globalMigrations: ReadonlyArray<string> = [
+  "ALTER TABLE global_memories ADD COLUMN is_cold INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE global_memories ADD COLUMN is_expired INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE global_memories ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE global_memories ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE global_memories ADD COLUMN expires_at INTEGER",
+]
+
+export const projectMigrations: ReadonlyArray<string> = [
+  "ALTER TABLE memories ADD COLUMN is_cold INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE memories ADD COLUMN is_expired INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE memories ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE memories ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE memories ADD COLUMN expires_at INTEGER",
+]
+
+export function applyMigrations(db: Database, migrations: ReadonlyArray<string>): void {
+  for (const sql of migrations) {
+    try {
+      db.exec(sql)
+    } catch (err) {
+      const msg = (err as Error).message.toLowerCase()
+      // SQLite returns "duplicate column name: <col>" when the column exists.
+      // We also accept "already exists" defensively.
+      if (!msg.includes("duplicate") && !msg.includes("already exists")) {
+        throw err
+      }
+    }
+  }
 }
 export function installShutdownHooks(db: Database): () => void {
   let closed = false

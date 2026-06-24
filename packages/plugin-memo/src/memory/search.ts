@@ -77,7 +77,8 @@ function rowsById(rows: MemoryRow[]): Map<number, MemoryRow> {
   return m
 }
 
-/** Pull a candidate set per DB. Returns MemoryRow objects (no embedding). */
+/** Pull a candidate set per DB. Excludes archived, expired, and cold rows
+ *  (Phase 05 decay). Returns MemoryRow objects (no embedding). */
 function candidateSet(
   db: Database,
   scope: Scope,
@@ -91,13 +92,18 @@ function candidateSet(
           `SELECT m.* FROM ${fts} f
              JOIN ${row} m ON m.id = f.rowid
             WHERE ${fts} MATCH ?
+              AND m.is_archived = 0 AND m.is_expired = 0 AND m.is_cold = 0
             ORDER BY rank
             LIMIT ?`,
         )
         .all(ftsQueryStr, k) as Array<Record<string, unknown>>)
     : []) as Array<Record<string, unknown>>
   const recencyRows = db
-    .prepare(`SELECT * FROM ${row} ORDER BY created_at DESC, importance DESC LIMIT ?`)
+    .prepare(
+      `SELECT * FROM ${row}
+        WHERE is_archived = 0 AND is_expired = 0 AND is_cold = 0
+        ORDER BY created_at DESC, importance DESC LIMIT ?`,
+    )
     .all(k) as Array<Record<string, unknown>>
   const seen = new Set<number>()
   const out: MemoryRow[] = []
@@ -294,12 +300,17 @@ export function memorySemanticSearch(
   const allCandidates: Array<MemoryRow & { source_db: string }> = []
   for (const target of targets) {
     const { row } = tableFor(target.scope)
-    const sql = args.category
-      ? `SELECT * FROM ${row} WHERE category = ?`
-      : `SELECT * FROM ${row}`
-    const rows = (args.category
-      ? target.db.prepare(sql).all(args.category)
-      : target.db.prepare(sql).all()) as Array<Record<string, unknown>>
+    const where: string[] = ["is_archived = 0", "is_expired = 0", "is_cold = 0"]
+    const params: (string | number)[] = []
+    if (args.category) {
+      where.push("category = ?")
+      params.push(args.category)
+    }
+    const whereClause = `WHERE ${where.join(" AND ")}`
+    const sql = `SELECT * FROM ${row} ${whereClause}`
+    const rows = (
+      params.length > 0 ? target.db.prepare(sql).all(...params) : target.db.prepare(sql).all()
+    ) as Array<Record<string, unknown>>
     for (const r of rows) allCandidates.push({ ...rowFromRecord(r), source_db: target.source })
   }
 
@@ -355,13 +366,13 @@ export function memoryRecent(
   const all: RowWithSource[] = []
   for (const target of targets) {
     const { row } = tableFor(target.scope)
-    const where: string[] = []
+    const where: string[] = ["is_archived = 0", "is_expired = 0", "is_cold = 0"]
     const params: (string | number)[] = []
     if (args.channel) {
       where.push("channel = ?")
       params.push(args.channel)
     }
-    const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
+    const whereClause = `WHERE ${where.join(" AND ")}`
     const sql = `SELECT * FROM ${row} ${whereClause} ORDER BY created_at DESC, id DESC LIMIT ?`
     const rows = (params.length > 0
       ? target.db.prepare(sql).all(...params, limit)
