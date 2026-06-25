@@ -1,6 +1,6 @@
 {
   "name": "@hmanlab/memo",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "Local-first MCP server for persistent, persona-aware memory across projects.",
   "type": "module",
   "files": [
