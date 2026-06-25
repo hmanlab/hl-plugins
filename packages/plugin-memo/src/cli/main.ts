@@ -121,7 +121,7 @@ const program = new Command()
 program
   .name("hmanlab-memory")
   .description("Local-first MCP memory server with personas, projects, decay, and conflict detection.")
-  .version("0.5.1")
+  .version("0.5.2")
 
 // init
 program
@@ -481,7 +481,7 @@ program
       const active = cfg.active_project ?? "(none)"
       const personas = listAiPersonas(db)
       const projects = projectList(db)
-      console.log(`hmanlab-memory v0.5.1`)
+      console.log(`hmanlab-memory v0.5.2`)
       console.log(`  Root DB:    ${hmanlabHome()}/root.db`)
       console.log(
         `  Personas:   ${personas.length} (${personas.filter((p) => p.is_builtin).length} built-in)`,

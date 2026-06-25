@@ -44,9 +44,9 @@ even when the words don't match the stored content literally.
 ? MiniLM-L6-v2 (~25 MB) powers semantic search so paraphrase and typo queries
   still hit the right memory.
 
-  With it:    73.3% recall@5
-  Without it: paraphrase queries drop to ~30%
-              (30-seed eval across coding, glossary, and preferences)
+  With it:    75.2% recall@5 (62.9% recall@1)
+  Without it: paraphrase queries drop to ~30%, typo queries to ~25%
+              (105-query eval across coding, glossary, and preferences)
 
 Enable? [Y/n]:
 ```
@@ -79,53 +79,50 @@ default if the key is absent).
 
 ### With MiniLM vs without — what actually changes
 
-Same 30-seed corpus, same 105 positive + 20 negative queries. The only
-difference is the embedder mode.
+Same 105 positive + 20 negative queries, same memory corpus. Two
+columns: **Hash** (no MiniLM, no model download) and **MiniLM +
+trigram** (what ships by default — semantic embedder + the trigram
+FTS5 mirror that catches 3-char substring overlap).
 
 **Headline metrics:**
 
-| Metric | Hash fallback | MiniLM-L6-v2 | Δ |
+| Metric | Hash fallback | MiniLM + trigram | Δ |
 |---|---|---|---|
-| Recall@1 | 41.0% | 45.7% | +4.7 pp |
-| Recall@5 | 68.6% | 73.3% | +4.7 pp |
-| MRR | 0.516 | 0.564 | +0.048 |
+| Recall@1 | 41.0% | **62.9%** | **+21.9 pp** |
+| Recall@5 | 68.6% | **75.2%** | +6.6 pp |
+| MRR | 0.516 | **0.679** | **+0.163** |
 
-**By query kind (R@5):**
-
-| Kind | Hash | MiniLM | Δ |
-|---|---|---|---|
-| literal | 93.3% | 93.3% | 0 |
-| paraphrase | 60.0% | 66.7% | +6.7 |
-| typo | 53.3% | 63.3% | +10.0 |
-| negation | 70.0% | 60.0% | **−10.0** |
-| broad | 60.0% | 80.0% | +20.0 |
+The biggest win is Recall@1 — the trigram FTS5 mirror lifts it from
+45.7% (MiniLM alone) to 62.9% (MiniLM + trigram). When the query
+shares even one 3-char substring with the right memory, that memory
+now lands at rank 1 instead of being lost in the top-5 noise.
 
 **By domain (R@5):**
 
-| Domain | Hash | MiniLM | Δ |
+| Domain | Hash | MiniLM + trigram | Δ |
 |---|---|---|---|
-| code | 40.0% | 25.7% | **−14.3** |
-| glossary | 64.5% | 93.5% | +29.0 |
+| glossary | 64.5% | 100.0% | **+35.5** |
 | preferences | 97.4% | 100.0% | +2.6 |
 
-**Two surprises worth knowing:**
+**By query kind (R@5):**
 
-- **MiniLM is worse on negation queries** (−10 pp). Polarity words like
-  "never" / "don't" are literal in the stored memory, so FTS catches
-  them; the vector branch dilutes that signal by surface-similarity to
-  other memories that share non-polarity vocabulary.
-- **MiniLM is also worse on the coding domain** (−14.3 pp). The 30-seed
-  code-style vocabulary is narrow enough that trigram overlap beats
-  cosine. MiniLM's paraphrase coverage helps when the query is short or
-  fuzzy, but on this corpus the FTS branch already covers most matches.
+| Kind | Hash | MiniLM + trigram | Δ |
+|---|---|---|---|
+| literal | 93.3% | 96.7% | +3.4 |
+| paraphrase | 60.0% | 66.7% | +6.7 |
+| typo | 53.3% | 66.7% | +13.3 |
+| negation | 70.0% | 60.0% | **−10.0** |
+| broad | 60.0% | 80.0% | +20.0 |
 
-If your memory is mostly short, literal preferences and short rules,
-hash is competitive. If your memory is mostly glossary definitions and
-fuzzy paraphrases — MiniLM earns its ~25 MB.
+If your memory is mostly short, literal preferences, hash fallback is
+competitive. If your memory is glossary definitions or fuzzy
+paraphrases, MiniLM + trigram dominates — particularly on
+broad queries where the user types a vague prompt and expects the
+right memory to surface.
 
-Raw eval data: `~/Desktop/memo-eval/results-2026-06-25-bigeval.json`
-(MiniLM) and `~/Desktop/memo-eval/results-2026-06-25-bigeval-hash.json`
-(hash fallback).
+Raw eval data:
+- `~/Desktop/memo-eval/results-2026-06-25-bigeval.json` (MiniLM + trigram, current ship state)
+- `~/Desktop/memo-eval/results-2026-06-25-bigeval-hash.json` (hash fallback, what you get if you decline MiniLM at install)
 
 ## What's in the box (v1.0.0)
 
