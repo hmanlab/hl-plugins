@@ -79,25 +79,22 @@ function rowsById(rows: MemoryRow[]): Map<number, MemoryRow> {
 
 /** Pull a candidate set per DB. Excludes archived, expired, and cold rows
  *  (Phase 05 decay). Returns MemoryRow objects (no embedding). */
-function candidateSet(
-  db: Database,
-  scope: Scope,
-  ftsQueryStr: string,
-  k: number,
-): MemoryRow[] {
+function candidateSet(db: Database, scope: Scope, ftsQueryStr: string, k: number): MemoryRow[] {
   const { row, fts } = tableFor(scope)
-  const ftsRows = (ftsQueryStr
-    ? (db
-        .prepare(
-          `SELECT m.* FROM ${fts} f
+  const ftsRows = (
+    ftsQueryStr
+      ? (db
+          .prepare(
+            `SELECT m.* FROM ${fts} f
              JOIN ${row} m ON m.id = f.rowid
             WHERE ${fts} MATCH ?
               AND m.is_archived = 0 AND m.is_expired = 0 AND m.is_cold = 0
             ORDER BY rank
             LIMIT ?`,
-        )
-        .all(ftsQueryStr, k) as Array<Record<string, unknown>>)
-    : []) as Array<Record<string, unknown>>
+          )
+          .all(ftsQueryStr, k) as Array<Record<string, unknown>>)
+      : []
+  ) as Array<Record<string, unknown>>
   const recencyRows = db
     .prepare(
       `SELECT * FROM ${row}
@@ -374,9 +371,9 @@ export function memoryRecent(
     }
     const whereClause = `WHERE ${where.join(" AND ")}`
     const sql = `SELECT * FROM ${row} ${whereClause} ORDER BY created_at DESC, id DESC LIMIT ?`
-    const rows = (params.length > 0
-      ? target.db.prepare(sql).all(...params, limit)
-      : target.db.prepare(sql).all(limit)) as Array<Record<string, unknown>>
+    const rows = (
+      params.length > 0 ? target.db.prepare(sql).all(...params, limit) : target.db.prepare(sql).all(limit)
+    ) as Array<Record<string, unknown>>
     for (const r of rows) all.push({ ...rowFromRecord(r), source_db: target.source })
   }
   all.sort((a, b) => b.created_at - a.created_at)

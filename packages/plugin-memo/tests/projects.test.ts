@@ -5,12 +5,7 @@ import { describe, it, expect } from "bun:test"
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { withTmpHome } from "./_helpers.ts"
-import {
-  ensureHome,
-  hmanlabHome,
-  projectsDirPath,
-  readConfig,
-} from "../src/config.ts"
+import { ensureHome, hmanlabHome, projectsDirPath, readConfig } from "../src/config.ts"
 import { openRootDb } from "../src/db.ts"
 import {
   projectArchive,
@@ -24,11 +19,7 @@ import {
   projectYamlPath,
   type ProjectRow,
 } from "../src/project/registry.ts"
-import {
-  NoActiveProjectError,
-  ProjectSwitcher,
-  requireActive,
-} from "../src/project/switcher.ts"
+import { NoActiveProjectError, ProjectSwitcher, requireActive } from "../src/project/switcher.ts"
 
 function fakeProjectPath(name: string): string {
   const dir = join(hmanlabHome(), "fake-projects", name)
@@ -322,8 +313,12 @@ describe("isolation: two projects have separate DBs", async () => {
       const a = new Database(projectDbPath(projectsDirPath(), "ftmo"))
       const b = new Database(projectDbPath(projectsDirPath(), "course"))
       try {
-        a.exec("INSERT INTO memories (content, persona_id, project_id, created_at, updated_at) VALUES ('ftmo-row', 'default', 'ftmo', 1, 1)")
-        b.exec("INSERT INTO memories (content, persona_id, project_id, created_at, updated_at) VALUES ('course-row', 'default', 'course', 1, 1)")
+        a.exec(
+          "INSERT INTO memories (content, persona_id, project_id, created_at, updated_at) VALUES ('ftmo-row', 'default', 'ftmo', 1, 1)",
+        )
+        b.exec(
+          "INSERT INTO memories (content, persona_id, project_id, created_at, updated_at) VALUES ('course-row', 'default', 'course', 1, 1)",
+        )
 
         const aRows = a.prepare("SELECT content FROM memories").all() as Array<{ content: string }>
         const bRows = b.prepare("SELECT content FROM memories").all() as Array<{ content: string }>

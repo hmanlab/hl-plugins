@@ -48,7 +48,13 @@ function embeddingFromBuf(buf: unknown): Embedding {
     u8 = buf
   } else if (ArrayBuffer.isView(buf)) {
     u8 = new Uint8Array(buf.byteLength)
-    u8.set(new Uint8Array((buf as ArrayBufferView).buffer, (buf as ArrayBufferView).byteOffset, (buf as ArrayBufferView).byteLength))
+    u8.set(
+      new Uint8Array(
+        (buf as ArrayBufferView).buffer,
+        (buf as ArrayBufferView).byteOffset,
+        (buf as ArrayBufferView).byteLength,
+      ),
+    )
   } else if (buf instanceof ArrayBuffer) {
     u8 = new Uint8Array(buf)
   } else {

@@ -54,9 +54,7 @@ export class SessionManager {
   async start(channel?: string): Promise<SessionBundle> {
     const activeProject = this.switcher.getActive()
     if (!activeProject) {
-      throw new Error(
-        'no active project — call project_switch("<name>") first',
-      )
+      throw new Error('no active project — call project_switch("<name>") first')
     }
     // Auto-close prior session.
     if (this.active) {
@@ -117,9 +115,11 @@ export class SessionManager {
     const db = openProjectDb(dbPath)
     try {
       const now = Date.now()
-      db.prepare(
-        "UPDATE project_sessions SET ended_at = ?, summary = ? WHERE id = ?",
-      ).run(now, summary, this.active.id)
+      db.prepare("UPDATE project_sessions SET ended_at = ?, summary = ? WHERE id = ?").run(
+        now,
+        summary,
+        this.active.id,
+      )
       this.active = null
     } finally {
       db.close()
@@ -130,9 +130,7 @@ export class SessionManager {
   async list(limit = 10): Promise<SessionRow[]> {
     const activeProject = this.switcher.getActive()
     if (!activeProject) return []
-    const db = openProjectDb(
-      activeProject.db_path || projectDbPath(this.projectsRoot(), activeProject.name),
-    )
+    const db = openProjectDb(activeProject.db_path || projectDbPath(this.projectsRoot(), activeProject.name))
     try {
       const rows = db
         .prepare(

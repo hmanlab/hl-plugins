@@ -10,17 +10,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import AdmZip from "adm-zip"
 import { withTmpHome } from "./_helpers.ts"
-import {
-  ensureHome,
-  hmanlabHome,
-  personasDirPath,
-  projectsDirPath,
-} from "../src/config.ts"
+import { ensureHome, hmanlabHome, personasDirPath, projectsDirPath } from "../src/config.ts"
 import { openRootDb } from "../src/db.ts"
-import {
-  projectList,
-  projectRegister,
-} from "../src/project/registry.js"
+import { projectList, projectRegister } from "../src/project/registry.js"
 import { memorySave } from "../src/memory/crud.js"
 import { readConfig, writeConfig } from "../src/config.js"
 import { setBuiltins, extractStarterPack, syncFromDisk } from "../src/persona/registry.js"
@@ -57,9 +49,9 @@ describe("CLI primitives — init flow", () => {
       const db = openRootDb()
       try {
         syncFromDisk(db, personasDirPath())
-        const personas = db
-          .prepare("SELECT name FROM ai_personas ORDER BY name")
-          .all() as Array<{ name: string }>
+        const personas = db.prepare("SELECT name FROM ai_personas ORDER BY name").all() as Array<{
+          name: string
+        }>
         expect(personas.map((p) => p.name)).toEqual(["creative", "default", "work"])
       } finally {
         db.close()

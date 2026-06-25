@@ -11,13 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod/v3"
 
-import {
-  ensureHome,
-  hmanlabHome,
-  personasDirPath,
-  projectsDirPath,
-  readConfig,
-} from "./config.js"
+import { ensureHome, hmanlabHome, personasDirPath, projectsDirPath, readConfig } from "./config.js"
 import { installShutdownHooks, openRootDb } from "./db.js"
 import { extractStarterPack, setBuiltins, syncFromDisk } from "./persona/registry.js"
 import { ProjectSwitcher } from "./project/switcher.js"

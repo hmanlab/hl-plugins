@@ -30,11 +30,7 @@ export function jsonResult(value: unknown) {
   return textResult(JSON.stringify(value, null, 2))
 }
 
-export function registerPersonaTools(
-  server: McpServer,
-  db: Database,
-  getPersonasDir: () => string,
-): void {
+export function registerPersonaTools(server: McpServer, db: Database, getPersonasDir: () => string): void {
   // ─── persona_list ──────────────────────────────────────────────────────
   server.registerTool(
     "persona_list",
@@ -101,9 +97,9 @@ export function registerPersonaTools(
       const persona = personas.get(args.name)
       if (!persona) {
         // Fall back to DB-only — the YAML might be broken but the row exists.
-        const row = db
-          .prepare("SELECT is_archived FROM ai_personas WHERE name = ?")
-          .get(args.name) as { is_archived: number } | undefined
+        const row = db.prepare("SELECT is_archived FROM ai_personas WHERE name = ?").get(args.name) as
+          | { is_archived: number }
+          | undefined
         if (!row) {
           return textResult(`Persona "${args.name}" not found.`)
         }
@@ -113,9 +109,9 @@ export function registerPersonaTools(
         )
       }
       const resolved = resolveChain(args.name, personas)
-      const row = db
-        .prepare("SELECT is_archived FROM ai_personas WHERE name = ?")
-        .get(args.name) as { is_archived: number } | undefined
+      const row = db.prepare("SELECT is_archived FROM ai_personas WHERE name = ?").get(args.name) as
+        | { is_archived: number }
+        | undefined
       return jsonResult({
         ...resolved,
         archived: row?.is_archived === 1,
@@ -136,9 +132,7 @@ export function registerPersonaTools(
           .describe("Persona name. Kebab-case, unique. E.g. 'trading', 'code-review'."),
         description: z.string().min(1).describe("One-line summary of what this persona is for."),
         voice: z.string().describe('How this persona speaks. E.g. "terse, technical".'),
-        traits: z
-          .array(z.string())
-          .describe('Behavioral traits. E.g. ["disciplined", "risk-aware"].'),
+        traits: z.array(z.string()).describe('Behavioral traits. E.g. ["disciplined", "risk-aware"].'),
         system_prompt: z
           .string()
           .min(1)
@@ -301,9 +295,9 @@ export function registerPersonaTools(
       inputSchema: {},
     },
     async () => {
-      const row = db
-        .prepare("SELECT content, updated_at FROM user_persona WHERE id = 1")
-        .get() as { content: string; updated_at: number } | undefined
+      const row = db.prepare("SELECT content, updated_at FROM user_persona WHERE id = 1").get() as
+        | { content: string; updated_at: number }
+        | undefined
       return jsonResult({
         content: row?.content ?? "",
         updated_at: row?.updated_at ?? 0,
@@ -318,9 +312,7 @@ export function registerPersonaTools(
       description:
         "Replace the user persona content. Pass the full new content (this is a replace, not a merge). updated_at is bumped.",
       inputSchema: {
-        content: z
-          .string()
-          .describe("Full new content for the user persona. Replaces existing content."),
+        content: z.string().describe("Full new content for the user persona. Replaces existing content."),
       },
     },
     async (args) => {

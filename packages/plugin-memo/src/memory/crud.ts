@@ -166,9 +166,10 @@ export function memorySave(db: Database, args: SaveArgs): SaveResult {
  *  last_accessed_at on read (memory warming). The returned row reflects the
  *  post-bump state. */
 export function memoryGet(db: Database, id: number, scope: Scope): MemoryRow | null {
-  const initial = db
-    .prepare(`SELECT * FROM ${tableFor(scope)} WHERE id = ?`)
-    .get(id) as Record<string, unknown> | null
+  const initial = db.prepare(`SELECT * FROM ${tableFor(scope)} WHERE id = ?`).get(id) as Record<
+    string,
+    unknown
+  > | null
   if (!initial) return null
   const now = Date.now()
   db.prepare(
@@ -178,9 +179,10 @@ export function memoryGet(db: Database, id: number, scope: Scope): MemoryRow | n
      WHERE id = ?`,
   ).run(now, id)
   // Re-read so the returned row reflects the bumped counters.
-  const row = db
-    .prepare(`SELECT * FROM ${tableFor(scope)} WHERE id = ?`)
-    .get(id) as Record<string, unknown> | null
+  const row = db.prepare(`SELECT * FROM ${tableFor(scope)} WHERE id = ?`).get(id) as Record<
+    string,
+    unknown
+  > | null
   return row ? rowFromRecord(row) : null
 }
 
@@ -201,21 +203,15 @@ export type UpdateResult = {
 /** Patch a memory. Re-embeds + reindexes vec0 if content changes.
  *  Refuses to update a row that's been superseded (PRD §20 Q4: superseded
  *  memories are read-only — point the caller at the canonical successor). */
-export function memoryUpdate(
-  db: Database,
-  id: number,
-  scope: Scope,
-  patch: UpdatePatch,
-): UpdateResult {
+export function memoryUpdate(db: Database, id: number, scope: Scope, patch: UpdatePatch): UpdateResult {
   const table = tableFor(scope)
-  const existing = db
-    .prepare(`SELECT * FROM ${table} WHERE id = ?`)
-    .get(id) as Record<string, unknown> | undefined
+  const existing = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id) as
+    | Record<string, unknown>
+    | undefined
   if (!existing) throw new Error(`Memory ${id} not found in ${scope}`)
   if ((existing["superseded_by"] as number | null) !== null) {
     throw new Error(
-      `memory ${id} is superseded by ${existing["superseded_by"]}; ` +
-        `update the canonical memory instead`,
+      `memory ${id} is superseded by ${existing["superseded_by"]}; ` + `update the canonical memory instead`,
     )
   }
 
@@ -223,12 +219,8 @@ export function memoryUpdate(
   const now = Date.now()
   const next = {
     content: (patch.content ?? (existing["content"] as string)) as string,
-    category: (patch.category !== undefined ? patch.category : existing["category"]) as
-      | string
-      | null,
-    channel: (patch.channel !== undefined ? patch.channel : existing["channel"]) as
-      | string
-      | null,
+    category: (patch.category !== undefined ? patch.category : existing["category"]) as string | null,
+    channel: (patch.channel !== undefined ? patch.channel : existing["channel"]) as string | null,
     importance: (patch.importance ?? (existing["importance"] as number)) as number,
   }
 
@@ -244,15 +236,7 @@ export function memoryUpdate(
          SET content = ?, category = ?, channel = ?, importance = ?,
              updated_at = ?, embedding = ?
        WHERE id = ?`,
-    ).run(
-      next.content,
-      next.category,
-      next.channel,
-      next.importance,
-      now,
-      float32ToBlob(v),
-      id,
-    )
+    ).run(next.content, next.category, next.channel, next.importance, now, float32ToBlob(v), id)
   } else {
     db.prepare(
       `UPDATE ${table}
@@ -288,12 +272,7 @@ export function memoryDelete(db: Database, id: number, scope: Scope): void {
  * subsequent `memory_update` on it returns a clear error pointing to the
  * canonical successor. Both ids must exist in the same scope.
  */
-export function memorySupersede(
-  db: Database,
-  oldId: number,
-  newId: number,
-  scope: Scope,
-): void {
+export function memorySupersede(db: Database, oldId: number, newId: number, scope: Scope): void {
   const table = tableFor(scope)
   const old = db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(oldId)
   if (!old) throw new Error(`Memory ${oldId} not found in ${scope}`)
@@ -311,10 +290,7 @@ export function memoryPromote(db: Database, id: number, scope: Scope): void {
   const table = tableFor(scope)
   const existing = db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(id)
   if (!existing) throw new Error(`Memory ${id} not found in ${scope}`)
-  db.prepare(`UPDATE ${table} SET is_pinned = 1, updated_at = ? WHERE id = ?`).run(
-    Date.now(),
-    id,
-  )
+  db.prepare(`UPDATE ${table} SET is_pinned = 1, updated_at = ? WHERE id = ?`).run(Date.now(), id)
 }
 
 /** Bulk soft delete. Sets `is_archived = 1`. Memories stay readable via
@@ -340,18 +316,18 @@ export function memoryPromoteToGlobal(
   rootDb: Database,
   id: number,
 ): { old_id: number; new_global_id: number; scope: "global" } {
-  const row = projectDb
-    .prepare(`SELECT * FROM memories WHERE id = ? AND is_archived = 0`)
-    .get(id) as Record<string, unknown> | undefined
+  const row = projectDb.prepare(`SELECT * FROM memories WHERE id = ? AND is_archived = 0`).get(id) as
+    | Record<string, unknown>
+    | undefined
   if (!row) throw new Error(`Memory ${id} not found in project (or is archived)`)
 
   // Copy into global_memories. Embedding is content-based and deterministic
   // — we copy the existing BLOB instead of re-embedding.
   const now = Date.now()
   const embedding = row["embedding"] as ArrayBuffer | Uint8Array | null
-  const embeddingBlob = embedding ? new Uint8Array(
-    embedding instanceof Uint8Array ? embedding : new Uint8Array(embedding),
-  ) : null
+  const embeddingBlob = embedding
+    ? new Uint8Array(embedding instanceof Uint8Array ? embedding : new Uint8Array(embedding))
+    : null
   const insertResult = rootDb
     .prepare(
       `INSERT INTO global_memories
@@ -395,15 +371,9 @@ export function memoryPromoteToGlobal(
  * Returns the raw row plus the new columns from the Phase 05 schema.
  * Used by memory_hygiene to enumerate candidate rows.
  */
-export function readRowForDecay(
-  db: Database,
-  id: number,
-  scope: Scope,
-): Record<string, unknown> | null {
+export function readRowForDecay(db: Database, id: number, scope: Scope): Record<string, unknown> | null {
   const table = tableFor(scope)
-  const row = db
-    .prepare(`SELECT * FROM ${table} WHERE id = ?`)
-    .get(id) as Record<string, unknown> | null
+  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id) as Record<string, unknown> | null
   return row
 }
 
@@ -430,12 +400,14 @@ export function readAllForHygiene(
 }> {
   const table = tableFor(scope)
   const rows = db
-    .prepare(`SELECT id, created_at, last_accessed_at, importance, access_count,
+    .prepare(
+      `SELECT id, created_at, last_accessed_at, importance, access_count,
                      is_pinned, is_expired, is_cold, is_archived, expires_at,
                      category, content
               FROM ${table}
               WHERE is_archived = 0
-              ORDER BY id`)
+              ORDER BY id`,
+    )
     .all() as Array<Record<string, unknown>>
   return rows.map((r) => ({
     id: r["id"] as number,

@@ -23,9 +23,7 @@ export type TmpPaths = {
   configYaml: string
 }
 
-export async function withTmpHome<T>(
-  fn: (paths: TmpPaths) => Promise<T> | T,
-): Promise<T> {
+export async function withTmpHome<T>(fn: (paths: TmpPaths) => Promise<T> | T): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), "hmanlab-memo-test-"))
   const paths: TmpPaths = {
     hmanlabRoot: dir,

@@ -90,9 +90,7 @@ export function projectYamlPath(projectsRoot: string, name: string): string {
  */
 function validateRegisterArgs(name: string, path: string): void {
   if (!NAME_RE.test(name)) {
-    throw new Error(
-      `Project name "${name}" must be kebab-case (lowercase letters, digits, hyphens)`,
-    )
+    throw new Error(`Project name "${name}" must be kebab-case (lowercase letters, digits, hyphens)`)
   }
   if (!existsSync(path)) {
     throw new Error(`Project path "${path}" does not exist on disk`)
@@ -171,31 +169,30 @@ export function projectRegister(
 
 /** Read a single project row by name. Returns null if not registered. */
 export function projectGet(rootDb: Database, name: string): ProjectRow | null {
-  const row = rootDb
-    .prepare("SELECT * FROM projects WHERE name = ?")
-    .get(name) as Record<string, unknown> | undefined
+  const row = rootDb.prepare("SELECT * FROM projects WHERE name = ?").get(name) as
+    | Record<string, unknown>
+    | undefined
   if (!row) return null
   return rowToProject(row)
 }
 
 /** List projects, ordered last_opened_at DESC NULLS LAST then name ASC. */
-export function projectList(
-  rootDb: Database,
-  opts: { includeArchived?: boolean } = {},
-): ProjectRow[] {
+export function projectList(rootDb: Database, opts: { includeArchived?: boolean } = {}): ProjectRow[] {
   const includeArchived = opts.includeArchived ?? false
-  const rows = (includeArchived
-    ? rootDb
-        .prepare(
-          "SELECT * FROM projects ORDER BY last_opened_at IS NULL DESC, last_opened_at DESC, name ASC",
-        )
-        .all()
-    : rootDb
-        .prepare(
-          "SELECT * FROM projects WHERE is_archived = 0 " +
-            "ORDER BY last_opened_at IS NULL DESC, last_opened_at DESC, name ASC",
-        )
-        .all()) as Array<Record<string, unknown>>
+  const rows = (
+    includeArchived
+      ? rootDb
+          .prepare(
+            "SELECT * FROM projects ORDER BY last_opened_at IS NULL DESC, last_opened_at DESC, name ASC",
+          )
+          .all()
+      : rootDb
+          .prepare(
+            "SELECT * FROM projects WHERE is_archived = 0 " +
+              "ORDER BY last_opened_at IS NULL DESC, last_opened_at DESC, name ASC",
+          )
+          .all()
+  ) as Array<Record<string, unknown>>
   return rows.map(rowToProject)
 }
 

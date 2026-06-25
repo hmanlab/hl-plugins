@@ -316,9 +316,9 @@ describe("registry CRUD", () => {
           parent: null,
         })
         deletePersona(db, "trading")
-        const row = db
-          .prepare("SELECT is_archived FROM ai_personas WHERE name = ?")
-          .get("trading") as { is_archived: number }
+        const row = db.prepare("SELECT is_archived FROM ai_personas WHERE name = ?").get("trading") as {
+          is_archived: number
+        }
         expect(row.is_archived).toBe(1)
         expect(existsSync(join(paths.personasDir, "trading.yaml"))).toBe(true)
       } finally {
@@ -336,9 +336,10 @@ describe("starter pack", () => {
         expect(existsSync(join(paths.personasDir, "default.yaml"))).toBe(true)
         expect(existsSync(join(paths.personasDir, "work.yaml"))).toBe(true)
         expect(existsSync(join(paths.personasDir, "creative.yaml"))).toBe(true)
-        const rows = db
-          .prepare("SELECT name, is_builtin FROM ai_personas ORDER BY name")
-          .all() as Array<{ name: string; is_builtin: number }>
+        const rows = db.prepare("SELECT name, is_builtin FROM ai_personas ORDER BY name").all() as Array<{
+          name: string
+          is_builtin: number
+        }>
         expect(rows.map((r) => r.name)).toEqual(["creative", "default", "work"])
         for (const r of rows) expect(r.is_builtin).toBe(1)
       } finally {
@@ -352,7 +353,10 @@ describe("starter pack", () => {
       const db = bootFresh(paths.hmanlabRoot)
       try {
         const edited = join(paths.personasDir, "default.yaml")
-        writeFileSync(edited, "name: default\ndescription: USER-EDITED\nvoice: x\ntraits: []\nsystem_prompt: y\n")
+        writeFileSync(
+          edited,
+          "name: default\ndescription: USER-EDITED\nvoice: x\ntraits: []\nsystem_prompt: y\n",
+        )
         // Re-run extraction: should be a no-op.
         const extracted = extractStarterPack(paths.personasDir)
         expect(extracted).toEqual([])
@@ -369,7 +373,10 @@ describe("starter pack", () => {
       const db = bootFresh(paths.hmanlabRoot)
       try {
         const edited = join(paths.personasDir, "default.yaml")
-        writeFileSync(edited, "name: default\ndescription: HAND-EDIT\nvoice: x\ntraits: [edited]\nsystem_prompt: y\n")
+        writeFileSync(
+          edited,
+          "name: default\ndescription: HAND-EDIT\nvoice: x\ntraits: [edited]\nsystem_prompt: y\n",
+        )
         const summary = syncFromDisk(db, paths.personasDir)
         expect(summary.upserted).toContain("default")
         const row = db

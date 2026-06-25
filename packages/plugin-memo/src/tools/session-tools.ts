@@ -35,13 +35,9 @@ export function registerSessionTools(server: McpServer, sessions: SessionManager
   server.registerTool(
     "session_end",
     {
-      description:
-        "Close the active session. Writes ended_at + summary to the project_sessions table.",
+      description: "Close the active session. Writes ended_at + summary to the project_sessions table.",
       inputSchema: {
-        summary: z
-          .string()
-          .min(1)
-          .describe("One-line summary of what happened in this session."),
+        summary: z.string().min(1).describe("One-line summary of what happened in this session."),
       },
     },
     async (args) => {
@@ -57,8 +53,7 @@ export function registerSessionTools(server: McpServer, sessions: SessionManager
   server.registerTool(
     "session_list",
     {
-      description:
-        "List recent sessions for the active project, ordered by started_at DESC.",
+      description: "List recent sessions for the active project, ordered by started_at DESC.",
       inputSchema: {
         limit: z.number().int().min(1).max(100).optional().describe("Default 10."),
       },

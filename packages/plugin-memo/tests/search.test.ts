@@ -9,19 +9,11 @@ import { describe, it, expect } from "bun:test"
 import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { withTmpHome } from "./_helpers.ts"
-import {
-  ensureHome,
-  hmanlabHome,
-  projectsDirPath,
-} from "../src/config.ts"
+import { ensureHome, hmanlabHome, projectsDirPath } from "../src/config.ts"
 import { openProjectDb, openRootDb } from "../src/db.ts"
 import { projectDbPath, projectRegister } from "../src/project/registry.ts"
 import { memorySave } from "../src/memory/crud.ts"
-import {
-  memoryRecent,
-  memorySearch,
-  memorySemanticSearch,
-} from "../src/memory/search.ts"
+import { memoryRecent, memorySearch, memorySemanticSearch } from "../src/memory/search.ts"
 
 function fakeProjectPath(name: string): string {
   const dir = join(hmanlabHome(), "fake-projects", name)
@@ -305,8 +297,7 @@ describe("perf smoke — 1000 saves in <60s", () => {
         }
         const elapsed = Date.now() - start
         expect(elapsed).toBeLessThan(60_000)
-        const count = (db.prepare("SELECT COUNT(*) AS n FROM memories").get() as { n: number })
-          .n
+        const count = (db.prepare("SELECT COUNT(*) AS n FROM memories").get() as { n: number }).n
         expect(count).toBe(1000)
       } finally {
         db.close()

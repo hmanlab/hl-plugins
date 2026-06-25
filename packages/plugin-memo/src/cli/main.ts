@@ -31,11 +31,7 @@ import {
   clonePersona,
   updatePersona,
 } from "../persona/registry.js"
-import {
-  projectArchive,
-  projectList,
-  projectRegister,
-} from "../project/registry.js"
+import { projectArchive, projectList, projectRegister } from "../project/registry.js"
 import { ProjectSwitcher } from "../project/switcher.js"
 import { projectExport } from "../export-import/exporter.js"
 import { projectImport } from "../export-import/importer.js"
@@ -51,8 +47,7 @@ function table(rows: Array<Record<string, unknown>>, columns: string[]): string 
   const widths = columns.map((c: string) =>
     Math.max(c.length, ...rows.map((r: Record<string, unknown>) => String(r[c] ?? "").length)),
   )
-  const fmt = (vals: string[]) =>
-    vals.map((v: string, i: number) => v.padEnd(widths[i]!)).join("  ")
+  const fmt = (vals: string[]) => vals.map((v: string, i: number) => v.padEnd(widths[i]!)).join("  ")
   const lines: string[] = []
   lines.push(fmt(columns))
   lines.push(widths.map((w: number) => "-".repeat(w)).join("  "))
@@ -154,11 +149,9 @@ program
   .description("Run the MCP server (same binary as claude mcp add launches).")
   .action(async () => {
     const { spawn } = await import("node:child_process")
-    const proc = spawn(
-      process.execPath,
-      [join(import.meta.dirname, "..", "dist", "memo-mcp-server.js")],
-      { stdio: "inherit" },
-    )
+    const proc = spawn(process.execPath, [join(import.meta.dirname, "..", "dist", "memo-mcp-server.js")], {
+      stdio: "inherit",
+    })
     proc.on("exit", (code) => process.exit(code ?? 0))
   })
 
@@ -173,7 +166,12 @@ personaCmd
       const rows = listAiPersonas(db)
       console.log(
         table(
-          rows.map((r) => ({ name: r.name, version: r.version, is_builtin: r.is_builtin, is_archived: r.is_archived })),
+          rows.map((r) => ({
+            name: r.name,
+            version: r.version,
+            is_builtin: r.is_builtin,
+            is_archived: r.is_archived,
+          })),
           ["name", "version", "is_builtin", "is_archived"],
         ),
       )
@@ -420,50 +418,45 @@ memoryCmd
   .option("--category <c>", "Category")
   .option("--importance <n>", "0..1", "0.5")
   .option("--scope <s>", "project | global", "project")
-  .action(
-    async (
-      content: string,
-      opts: { category?: string; importance?: string; scope?: string },
-    ) => {
-      const scope = (opts.scope ?? "project") as "project" | "global"
-      const importance = parseFloat(opts.importance ?? "0.5")
-      const cfg = readConfig()
-      if (scope === "project") {
-        if (!cfg.active_project) {
-          console.error('no active project — run: hmanlab-memory project switch <name>')
-          process.exit(1)
-        }
-        const { openProjectDb } = await import("../db.js")
-        const { projectDbPath } = await import("../project/registry.js")
-        const db = openProjectDb(projectDbPath(projectsDirPath(), cfg.active_project))
-        try {
-          const result = memorySave(db, {
-            content,
-            category: opts.category ?? null,
-            importance,
-            scope,
-            project_id: cfg.active_project,
-          })
-          console.log(json(result))
-        } finally {
-          db.close()
-        }
-      } else {
-        const db = openRootDb()
-        try {
-          const result = memorySave(db, {
-            content,
-            category: opts.category ?? null,
-            importance,
-            scope: "global",
-          })
-          console.log(json(result))
-        } finally {
-          db.close()
-        }
+  .action(async (content: string, opts: { category?: string; importance?: string; scope?: string }) => {
+    const scope = (opts.scope ?? "project") as "project" | "global"
+    const importance = parseFloat(opts.importance ?? "0.5")
+    const cfg = readConfig()
+    if (scope === "project") {
+      if (!cfg.active_project) {
+        console.error("no active project — run: hmanlab-memory project switch <name>")
+        process.exit(1)
       }
-    },
-  )
+      const { openProjectDb } = await import("../db.js")
+      const { projectDbPath } = await import("../project/registry.js")
+      const db = openProjectDb(projectDbPath(projectsDirPath(), cfg.active_project))
+      try {
+        const result = memorySave(db, {
+          content,
+          category: opts.category ?? null,
+          importance,
+          scope,
+          project_id: cfg.active_project,
+        })
+        console.log(json(result))
+      } finally {
+        db.close()
+      }
+    } else {
+      const db = openRootDb()
+      try {
+        const result = memorySave(db, {
+          content,
+          category: opts.category ?? null,
+          importance,
+          scope: "global",
+        })
+        console.log(json(result))
+      } finally {
+        db.close()
+      }
+    }
+  })
 memoryCmd
   .command("hygiene [scope]")
   .description("Memory hygiene report. Outputs JSON.")
@@ -490,7 +483,9 @@ program
       const projects = projectList(db)
       console.log(`hmanlab-memory v0.5.0`)
       console.log(`  Root DB:    ${hmanlabHome()}/root.db`)
-      console.log(`  Personas:   ${personas.length} (${personas.filter((p) => p.is_builtin).length} built-in)`)
+      console.log(
+        `  Personas:   ${personas.length} (${personas.filter((p) => p.is_builtin).length} built-in)`,
+      )
       console.log(`  Projects:   ${projects.length}`)
       console.log(`  Active:     ${active}`)
       console.log(`  cwd_auto:   ${cfg.cwd_auto_detect ? "enabled" : "disabled"}`)
@@ -535,7 +530,9 @@ mcpCmd
   .action(() => {
     console.log(`claude mcp add hmanlab-memory -- ${homedir()}/.local/bin/hmanlab-memory start`)
     console.log(`# or for local dev:`)
-    console.log(`claude mcp add hmanlab-memory -s user -- bun ${join(import.meta.dirname, "..", "bin", "hmanlab-memory.js")} start`)
+    console.log(
+      `claude mcp add hmanlab-memory -s user -- bun ${join(import.meta.dirname, "..", "bin", "hmanlab-memory.js")} start`,
+    )
   })
 mcpCmd
   .command("cursor")
@@ -543,7 +540,7 @@ mcpCmd
   .action(() => {
     console.log(
       json({
-        "mcpServers": {
+        mcpServers: {
           "hmanlab-memory": {
             command: "hmanlab-memory",
             args: ["start"],

@@ -9,21 +9,9 @@
 // computed live in search.ts.
 
 import type { Database } from "bun:sqlite"
-import {
-  readAllForHygiene,
-  writeDecayFlags,
-} from "./crud.js"
-import {
-  decayMultiplier,
-  shouldMarkCold,
-  shouldMarkExpired,
-  type DecayRow,
-} from "../decay/engine.js"
-import {
-  DEFAULT_DECAY_POLICY,
-  readDecayPolicy,
-  type DecayPolicy,
-} from "../decay/policy.js"
+import { readAllForHygiene, writeDecayFlags } from "./crud.js"
+import { decayMultiplier, shouldMarkCold, shouldMarkExpired, type DecayRow } from "../decay/engine.js"
+import { DEFAULT_DECAY_POLICY, readDecayPolicy, type DecayPolicy } from "../decay/policy.js"
 import { detectConflict, type ConflictCandidate } from "../conflict/detector.js"
 import { cosineSimilarity, getEmbedder } from "../embedder.js"
 import { readProjectYaml } from "../project/registry.js"
@@ -156,9 +144,7 @@ export async function buildHygieneReport(args: {
 
   for (const r of rows) {
     const ageDays = (now - r.created_at) / DAY_MS
-    const lastAccDays = r.last_accessed_at === null
-      ? null
-      : (now - r.last_accessed_at) / DAY_MS
+    const lastAccDays = r.last_accessed_at === null ? null : (now - r.last_accessed_at) / DAY_MS
 
     const decayRow: DecayRow = {
       created_at: r.created_at,
@@ -298,10 +284,7 @@ export async function buildHygieneReport(args: {
     }
   }
 
-  const archivedCount = rows.reduce(
-    (n, r) => n + (updates.find((u) => u.id === r.id)?.is_archived ?? 0),
-    0,
-  )
+  const archivedCount = rows.reduce((n, r) => n + (updates.find((u) => u.id === r.id)?.is_archived ?? 0), 0)
 
   return {
     scope: args.scope,

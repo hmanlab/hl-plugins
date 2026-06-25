@@ -4,11 +4,7 @@ import { describe, it, expect } from "bun:test"
 import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { withTmpHome } from "./_helpers.ts"
-import {
-  ensureHome,
-  hmanlabHome,
-  projectsDirPath,
-} from "../src/config.ts"
+import { ensureHome, hmanlabHome, projectsDirPath } from "../src/config.ts"
 import { openProjectDb, openRootDb } from "../src/db.ts"
 import { projectDbPath, projectRegister } from "../src/project/registry.ts"
 import { memorySave } from "../src/memory/crud.ts"
@@ -91,9 +87,7 @@ describe("memory_hygiene — cold flag persistence", () => {
         expect(report.cold[0]?.id).toBe(1)
 
         // Flag persisted.
-        const row = db
-          .prepare("SELECT is_cold FROM memories WHERE id = 1")
-          .get() as { is_cold: number }
+        const row = db.prepare("SELECT is_cold FROM memories WHERE id = 1").get() as { is_cold: number }
         expect(row.is_cold).toBe(1)
       } finally {
         db.close()

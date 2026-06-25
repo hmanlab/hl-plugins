@@ -27,12 +27,7 @@ import {
   memoryUpdate,
   type Scope,
 } from "../memory/crud.js"
-import {
-  memoryRecent,
-  memorySearch,
-  memorySemanticSearch,
-  type CrossDbScope,
-} from "../memory/search.js"
+import { memoryRecent, memorySearch, memorySemanticSearch, type CrossDbScope } from "../memory/search.js"
 import { detectConflict } from "../conflict/detector.js"
 import { getEmbedder } from "../embedder.js"
 import { buildHygieneReport, type HygieneReport } from "../memory/hygiene.js"
@@ -92,10 +87,7 @@ export function registerMemoryTools(
         const embedder = getEmbedder()
         const newVec = embedder.embed(args.content)
 
-        const runSave = async (
-          db: Database,
-          projectName: string | null,
-        ): Promise<unknown> => {
+        const runSave = async (db: Database, projectName: string | null): Promise<unknown> => {
           if (!args.force) {
             const candidates = db
               .prepare(
@@ -191,9 +183,7 @@ export function registerMemoryTools(
       try {
         const result =
           scope === "project"
-            ? await withProjectDb(switcher, (db) =>
-                Promise.resolve(memoryUpdate(db, id, "project", patch)),
-              )
+            ? await withProjectDb(switcher, (db) => Promise.resolve(memoryUpdate(db, id, "project", patch)))
             : memoryUpdate(rootDb, id, "global", patch)
         return jsonResult(result)
       } catch (err) {
@@ -476,9 +466,7 @@ export function registerMemoryTools(
       try {
         const archived =
           scope === "project"
-            ? await withProjectDb(switcher, (db) =>
-                Promise.resolve(memoryArchive(db, args.ids, "project")),
-              )
+            ? await withProjectDb(switcher, (db) => Promise.resolve(memoryArchive(db, args.ids, "project")))
             : memoryArchive(rootDb, args.ids, "global")
         return jsonResult({ archived, requested: args.ids.length })
       } catch (err) {

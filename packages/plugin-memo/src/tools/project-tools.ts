@@ -21,11 +21,7 @@ import {
   projectUnregister,
   readProjectYaml,
 } from "../project/registry.js"
-import {
-  NoActiveProjectError,
-  type ProjectSwitcher,
-  requireActive,
-} from "../project/switcher.js"
+import { NoActiveProjectError, type ProjectSwitcher, requireActive } from "../project/switcher.js"
 import type { SessionManager } from "../sessions/manager.js"
 import { textResult, jsonResult } from "./persona-tools.js"
 
@@ -211,9 +207,7 @@ export function registerProjectTools(
         if (switcher.getActive()?.name === args.name) {
           switcher.clear()
         }
-        return textResult(
-          `Unregistered project "${args.name}". DB file and project.yaml preserved on disk.`,
-        )
+        return textResult(`Unregistered project "${args.name}". DB file and project.yaml preserved on disk.`)
       } catch (err) {
         return textResult(`project_unregister failed: ${(err as Error).message}`)
       }

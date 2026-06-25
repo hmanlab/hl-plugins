@@ -5,23 +5,11 @@ import { describe, it, expect } from "bun:test"
 import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { withTmpHome } from "./_helpers.ts"
-import {
-  ensureHome,
-  hmanlabHome,
-  projectsDirPath,
-} from "../src/config.ts"
+import { ensureHome, hmanlabHome, projectsDirPath } from "../src/config.ts"
 import { openProjectDb, openRootDb } from "../src/db.ts"
-import {
-  projectDbPath,
-  projectRegister,
-} from "../src/project/registry.ts"
+import { projectDbPath, projectRegister } from "../src/project/registry.ts"
 import { ProjectSwitcher } from "../src/project/switcher.ts"
-import {
-  memoryDelete,
-  memoryGet,
-  memorySave,
-  memoryUpdate,
-} from "../src/memory/crud.ts"
+import { memoryDelete, memoryGet, memorySave, memoryUpdate } from "../src/memory/crud.ts"
 import { NoActiveProjectError } from "../src/project/switcher.ts"
 
 function fakeProjectPath(name: string): string {
@@ -77,9 +65,9 @@ describe("memory_save", () => {
       expect(row?.["importance"]).toBeCloseTo(0.9, 5)
 
       // FTS5 mirror has the row.
-      const ftsRow = db
-        .prepare("SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?")
-        .get("rules") as { rowid: number } | undefined
+      const ftsRow = db.prepare("SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?").get("rules") as
+        | { rowid: number }
+        | undefined
       expect(ftsRow?.rowid).toBe(1)
     })
   })
@@ -98,9 +86,9 @@ describe("memory_save", () => {
         expect(result.id).toBe(1)
         expect(result.scope).toBe("global")
 
-        const row = rootDb
-          .prepare("SELECT content FROM global_memories WHERE id = ?")
-          .get(1) as { content: string }
+        const row = rootDb.prepare("SELECT content FROM global_memories WHERE id = ?").get(1) as {
+          content: string
+        }
         expect(row.content).toBe("A global rule about backups")
       } finally {
         rootDb.close()
@@ -132,25 +120,23 @@ describe("memory_update", () => {
   it("re-embeds and reindexes FTS5 when content changes", async () => {
     await withActiveProject("ftmo", async (db) => {
       memorySave(db, { content: "alpha", scope: "project", project_id: "ftmo" })
-      const before = db
-        .prepare("SELECT embedding FROM memories WHERE id = ?")
-        .get(1) as { embedding: Uint8Array }
+      const before = db.prepare("SELECT embedding FROM memories WHERE id = ?").get(1) as {
+        embedding: Uint8Array
+      }
       const result = memoryUpdate(db, 1, "project", { content: "beta" })
       expect(result.reembedded).toBe(true)
-      const after = db
-        .prepare("SELECT embedding FROM memories WHERE id = ?")
-        .get(1) as { embedding: Uint8Array }
+      const after = db.prepare("SELECT embedding FROM memories WHERE id = ?").get(1) as {
+        embedding: Uint8Array
+      }
       // Embedding bytes should differ.
-      expect(Array.from(before.embedding).join(",")).not.toBe(
-        Array.from(after.embedding).join(","),
-      )
+      expect(Array.from(before.embedding).join(",")).not.toBe(Array.from(after.embedding).join(","))
       // FTS5 mirror updated.
-      const oldHit = db
-        .prepare("SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?")
-        .get("alpha") as { rowid: number } | null
-      const newHit = db
-        .prepare("SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?")
-        .get("beta") as { rowid: number } | null
+      const oldHit = db.prepare("SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?").get("alpha") as {
+        rowid: number
+      } | null
+      const newHit = db.prepare("SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?").get("beta") as {
+        rowid: number
+      } | null
       expect(oldHit).toBeNull()
       expect(newHit?.rowid).toBe(1)
     })
@@ -159,17 +145,15 @@ describe("memory_update", () => {
   it("importance-only update does not re-embed", async () => {
     await withActiveProject("ftmo", async (db) => {
       memorySave(db, { content: "x", scope: "project", project_id: "ftmo" })
-      const before = db
-        .prepare("SELECT embedding FROM memories WHERE id = ?")
-        .get(1) as { embedding: Uint8Array }
+      const before = db.prepare("SELECT embedding FROM memories WHERE id = ?").get(1) as {
+        embedding: Uint8Array
+      }
       const result = memoryUpdate(db, 1, "project", { importance: 0.2 })
       expect(result.reembedded).toBe(false)
-      const after = db
-        .prepare("SELECT embedding FROM memories WHERE id = ?")
-        .get(1) as { embedding: Uint8Array }
-      expect(Array.from(before.embedding).join(",")).toBe(
-        Array.from(after.embedding).join(","),
-      )
+      const after = db.prepare("SELECT embedding FROM memories WHERE id = ?").get(1) as {
+        embedding: Uint8Array
+      }
+      expect(Array.from(before.embedding).join(",")).toBe(Array.from(after.embedding).join(","))
     })
   })
 })

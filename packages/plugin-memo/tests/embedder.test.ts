@@ -2,12 +2,7 @@
 // gives similar texts higher cosine similarity than dissimilar ones.
 
 import { describe, it, expect } from "bun:test"
-import {
-  cosineSimilarity,
-  embed,
-  EMBEDDING_DIM,
-  float32ToBlob,
-} from "../src/embedder.ts"
+import { cosineSimilarity, embed, EMBEDDING_DIM, float32ToBlob } from "../src/embedder.ts"
 
 describe("embed()", () => {
   it("returns 384-dim vectors", () => {

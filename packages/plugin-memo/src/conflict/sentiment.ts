@@ -5,8 +5,7 @@
 // Phase 06 may swap this for a small classifier or LLM call if precision
 // is poor.
 
-const NEGATION =
-  /\b(not|no|never|don'?t|doesn'?t|isn'?t|won'?t|cannot|can'?t|shouldn'?t|prohibit)\b/i
+const NEGATION = /\b(not|no|never|don'?t|doesn'?t|isn'?t|won'?t|cannot|can'?t|shouldn'?t|prohibit)\b/i
 const POSITIVE = /\b(use|prefer|always|must|do|should|recommend|require)\b/i
 const NEGATIVE = /\b(avoid|never|don'?t|skip|reject|forbid|prohibit)\b/i
 
@@ -26,8 +25,5 @@ export function polarityOf(text: string): Polarity {
 
 /** True iff the two polarities are clearly opposite. */
 export function oppositePolarity(a: Polarity, b: Polarity): boolean {
-  return (
-    (a === "positive" && b === "negative") ||
-    (a === "negative" && b === "positive")
-  )
+  return (a === "positive" && b === "negative") || (a === "negative" && b === "positive")
 }

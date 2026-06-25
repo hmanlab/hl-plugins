@@ -43,11 +43,6 @@ export function bootstrapEdges(db: Database, scope: "project" | "global"): void 
 
 /** Suggested relation vocabulary (PRD §9). Free-form strings are also
  *  accepted; the CLI suggests from this list. */
-export const SUGGESTED_RELATIONS = [
-  "supports",
-  "contradicts",
-  "derived_from",
-  "see_also",
-] as const
+export const SUGGESTED_RELATIONS = ["supports", "contradicts", "derived_from", "see_also"] as const
 
 export type Relation = (typeof SUGGESTED_RELATIONS)[number] | `custom:${string}`

@@ -85,9 +85,7 @@ export function readConfig(): MemoConfig {
     }
     return { ...DEFAULT_CONFIG, ...(parsed as Partial<MemoConfig>) }
   } catch (err) {
-    process.stderr.write(
-      `[hmanlab-memo] failed to read ${path}: ${(err as Error).message}; using defaults\n`,
-    )
+    process.stderr.write(`[hmanlab-memo] failed to read ${path}: ${(err as Error).message}; using defaults\n`)
     return { ...DEFAULT_CONFIG }
   }
 }

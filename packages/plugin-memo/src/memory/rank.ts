@@ -60,8 +60,7 @@ export function applyDecayPlaceholder(
       out.set(id, score)
       continue
     }
-    const stale =
-      row.last_accessed_at !== null && now - row.last_accessed_at > DECAY_DAYS * DAY_MS
+    const stale = row.last_accessed_at !== null && now - row.last_accessed_at > DECAY_DAYS * DAY_MS
     if (stale && row.importance < DECAY_IMPORTANCE_THRESHOLD) {
       out.set(id, score * 0.5)
     } else {

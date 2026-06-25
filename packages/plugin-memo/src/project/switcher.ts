@@ -6,13 +6,7 @@
 import { existsSync } from "node:fs"
 import type { Database } from "bun:sqlite"
 import { readConfig, writeConfig } from "../config.js"
-import {
-  projectGet,
-  projectDbPath,
-  readProjectYaml,
-  type ProjectRow,
-  type ProjectYaml,
-} from "./registry.js"
+import { projectGet, projectDbPath, readProjectYaml, type ProjectRow, type ProjectYaml } from "./registry.js"
 
 export type ActiveProject = {
   name: string
@@ -86,9 +80,7 @@ export class ProjectSwitcher {
     }
     const now = Date.now()
     this.rootDb
-      .prepare(
-        "UPDATE projects SET last_opened_at = $now, updated_at = $now WHERE name = $name",
-      )
+      .prepare("UPDATE projects SET last_opened_at = $now, updated_at = $now WHERE name = $name")
       .run({ $now: now, $name: name })
     writeConfig({ active_project: name })
     this.active = { name: row.name, db_path: dbPath, yaml, row }

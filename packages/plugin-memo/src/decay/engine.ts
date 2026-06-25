@@ -27,11 +27,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
  *   - cold → ×0.5
  * Both rules can stack.
  */
-export function decayMultiplier(
-  row: DecayRow,
-  policy: DecayPolicy,
-  now: number = Date.now(),
-): number {
+export function decayMultiplier(row: DecayRow, policy: DecayPolicy, now: number = Date.now()): number {
   if (row.is_pinned === 1) return 1.0
   if (row.is_expired === 1) return 0.0
 
@@ -43,21 +39,14 @@ export function decayMultiplier(
   if (row.access_count === 0 && ageDays > policy.access_zero_decay_days) {
     mult *= policy.access_zero_decay_factor
   }
-  if (
-    lastAccDays > policy.cold_days &&
-    row.importance < policy.cold_importance_threshold
-  ) {
+  if (lastAccDays > policy.cold_days && row.importance < policy.cold_importance_threshold) {
     mult *= 0.5
   }
   return mult
 }
 
 /** True iff the row should be marked cold (`is_cold = 1`) per the policy. */
-export function shouldMarkCold(
-  row: DecayRow,
-  policy: DecayPolicy,
-  now: number = Date.now(),
-): boolean {
+export function shouldMarkCold(row: DecayRow, policy: DecayPolicy, now: number = Date.now()): boolean {
   if (row.is_pinned === 1) return false
   const lastAccess = row.last_accessed_at ?? row.created_at
   const lastAccDays = (now - lastAccess) / DAY_MS
@@ -65,9 +54,6 @@ export function shouldMarkCold(
 }
 
 /** True iff the row's `expires_at` is in the past. */
-export function shouldMarkExpired(
-  row: { expires_at: number | null },
-  now: number = Date.now(),
-): boolean {
+export function shouldMarkExpired(row: { expires_at: number | null }, now: number = Date.now()): boolean {
   return row.expires_at !== null && row.expires_at < now
 }

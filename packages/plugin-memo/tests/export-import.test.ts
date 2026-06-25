@@ -77,9 +77,9 @@ describe("projectExport", () => {
 
       // Write a unique marker into user_persona + ai_personas.
       const rootDb = openRootDb()
-      rootDb.prepare("UPDATE user_persona SET content = ? WHERE id = 1").run(
-        "USER_PERSONA_MARKER_should_not_leak",
-      )
+      rootDb
+        .prepare("UPDATE user_persona SET content = ? WHERE id = 1")
+        .run("USER_PERSONA_MARKER_should_not_leak")
       rootDb
         .prepare("UPDATE ai_personas SET description = ? WHERE name = 'default'")
         .run("AI_PERSONAS_MARKER_should_not_leak")

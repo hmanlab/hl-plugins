@@ -35,14 +35,34 @@ describe("detectConflict — 20-pair smoke set", () => {
 
   const pairs: Pair[] = [
     // 1-5: clear conflicts (same category + opposite polarity + high sim)
-    { a: "Always use 1% risk per trade", b: "Never use 1% risk per trade", category: "rules", expected: "conflict" },
+    {
+      a: "Always use 1% risk per trade",
+      b: "Never use 1% risk per trade",
+      category: "rules",
+      expected: "conflict",
+    },
     { a: "Prefer tight stop losses", b: "Avoid tight stop losses", category: "rules", expected: "conflict" },
     { a: "Must use MetaTrader 5", b: "Don't use MetaTrader", category: "rules", expected: "conflict" },
-    { a: "Always size by account percent", b: "Never size by account percent", category: "strategy", expected: "conflict" },
-    { a: "Prefer London open entries", b: "Avoid London open entries", category: "strategy", expected: "conflict" },
+    {
+      a: "Always size by account percent",
+      b: "Never size by account percent",
+      category: "strategy",
+      expected: "conflict",
+    },
+    {
+      a: "Prefer London open entries",
+      b: "Avoid London open entries",
+      category: "strategy",
+      expected: "conflict",
+    },
     // 6-10: no conflicts — same polarity, or different category
     { a: "Always use 1% risk", b: "Prefer 1% risk too", category: "rules", expected: "no-conflict" },
-    { a: "Avoid trading on news", b: "Avoid trading on news days", category: "strategy", expected: "no-conflict" },
+    {
+      a: "Avoid trading on news",
+      b: "Avoid trading on news days",
+      category: "strategy",
+      expected: "no-conflict",
+    },
     { a: "Use MetaTrader 5", b: "Use MetaTrader 5 for FTMO", category: "rules", expected: "no-conflict" },
     { a: "Prefer tight stops", b: "Use 2% risk per trade", category: "strategy", expected: "no-conflict" },
     { a: "Account is 10000", b: "Account started 2024", category: "journal", expected: "no-conflict" },
@@ -53,9 +73,19 @@ describe("detectConflict — 20-pair smoke set", () => {
     { a: "Always backtest", b: "Never backtest", category: "rules", expected: "no-conflict" },
     { a: "Use 4hr chart", b: "Don't use 4hr chart", category: "rules", expected: "no-conflict" },
     // 16-20: neutral pair — no polarity detected, no conflict
-    { a: "FTMO balance is 100000", b: "Account balance is 95000", category: "rules", expected: "no-conflict" },
+    {
+      a: "FTMO balance is 100000",
+      b: "Account balance is 95000",
+      category: "rules",
+      expected: "no-conflict",
+    },
     { a: "London open 8am UTC", b: "London open 8am UTC summer", category: "rules", expected: "no-conflict" },
-    { a: "Risk 1 percent per trade", b: "Risk 1 percent per trade standard", category: "rules", expected: "no-conflict" },
+    {
+      a: "Risk 1 percent per trade",
+      b: "Risk 1 percent per trade standard",
+      category: "rules",
+      expected: "no-conflict",
+    },
     { a: "Use ATR stops", b: "Use ATR stops on M15", category: "strategy", expected: "no-conflict" },
     { a: "Notes from today", b: "Today's trades", category: "journal", expected: "no-conflict" },
   ]

@@ -69,13 +69,13 @@ export function memoryLink(args: {
   const rows = rowTable(scope)
 
   // Validate endpoints exist (and are not archived).
-  const source = db
-    .prepare(`SELECT id FROM ${rows} WHERE id = ? AND is_archived = 0`)
-    .get(sourceId) as { id: number } | undefined
+  const source = db.prepare(`SELECT id FROM ${rows} WHERE id = ? AND is_archived = 0`).get(sourceId) as
+    | { id: number }
+    | undefined
   if (!source) throw new Error(`source memory ${sourceId} not found in ${scope} (or archived)`)
-  const target = db
-    .prepare(`SELECT id FROM ${rows} WHERE id = ? AND is_archived = 0`)
-    .get(targetId) as { id: number } | undefined
+  const target = db.prepare(`SELECT id FROM ${rows} WHERE id = ? AND is_archived = 0`).get(targetId) as
+    | { id: number }
+    | undefined
   if (!target) throw new Error(`target memory ${targetId} not found in ${scope} (or archived)`)
   if (sourceId === targetId) {
     throw new Error("source_id and target_id must be different")
@@ -96,9 +96,7 @@ export function memoryLink(args: {
   } catch (err) {
     const msg = (err as Error).message.toLowerCase()
     if (msg.includes("unique") || msg.includes("constraint")) {
-      throw new Error(
-        `Edge already exists: source=${sourceId} target=${targetId} relation="${relation}"`,
-      )
+      throw new Error(`Edge already exists: source=${sourceId} target=${targetId} relation="${relation}"`)
     }
     throw err
   }
@@ -142,9 +140,7 @@ export function memoryRelated(args: {
     // For each node in the frontier, find its out-edges (source_id = node.id).
     for (const node of currentFrontier) {
       const outEdges = args.db
-        .prepare(
-          `SELECT target_id, relation FROM ${edges} WHERE source_id = ?`,
-        )
+        .prepare(`SELECT target_id, relation FROM ${edges} WHERE source_id = ?`)
         .all(node.id) as Array<{ target_id: number; relation: string }>
       for (const e of outEdges) {
         if (visited.has(e.target_id)) continue

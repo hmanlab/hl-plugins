@@ -25,10 +25,7 @@ export type ImportResult = {
  * Import a project from a zip. The zip must contain project.yaml +
  * hmanlab.db + manifest.json at the root.
  */
-export async function projectImport(args: {
-  archivePath: string
-  name?: string
-}): Promise<ImportResult> {
+export async function projectImport(args: { archivePath: string; name?: string }): Promise<ImportResult> {
   if (!existsSync(args.archivePath)) {
     throw new Error(`Archive not found: ${args.archivePath}`)
   }
@@ -39,10 +36,7 @@ export async function projectImport(args: {
 
   for (const required of ["project.yaml", "hmanlab.db", "manifest.json"]) {
     if (!entries.has(required)) {
-      throw new Error(
-        `Archive is missing required entry "${required}". ` +
-          `Got: ${[...entries].join(", ")}`,
-      )
+      throw new Error(`Archive is missing required entry "${required}". ` + `Got: ${[...entries].join(", ")}`)
     }
   }
 
@@ -75,9 +69,7 @@ export async function projectImport(args: {
   // Integrity check before we touch the user's projects dir.
   const checkDb = openProjectDb(tmpDb)
   try {
-    const result = checkDb.prepare("PRAGMA integrity_check").get() as
-      | { integrity_check: string }
-      | undefined
+    const result = checkDb.prepare("PRAGMA integrity_check").get() as { integrity_check: string } | undefined
     if (!result || result.integrity_check !== "ok") {
       throw new Error(
         `Archive's hmanlab.db failed integrity_check: ${result?.integrity_check ?? "(no result)"}`,

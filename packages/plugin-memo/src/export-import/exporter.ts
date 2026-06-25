@@ -67,13 +67,9 @@ export async function projectExport(args: {
   // Count memories + channels.
   const dumpDb = openProjectDb(tmpDump)
   try {
-    const count = (
-      dumpDb.prepare("SELECT COUNT(*) AS n FROM memories").get() as { n: number }
-    ).n
+    const count = (dumpDb.prepare("SELECT COUNT(*) AS n FROM memories").get() as { n: number }).n
     const channelRows = dumpDb
-      .prepare(
-        "SELECT DISTINCT channel FROM memories WHERE channel IS NOT NULL ORDER BY channel",
-      )
+      .prepare("SELECT DISTINCT channel FROM memories WHERE channel IS NOT NULL ORDER BY channel")
       .all() as Array<{ channel: string }>
 
     const manifest: Manifest = ManifestSchema.parse({
@@ -87,9 +83,7 @@ export async function projectExport(args: {
       embedding_dim: 384,
     })
 
-    const outPath =
-      args.outputPath ??
-      join(defaultExportDir(), `${args.name}-${todayIsoDate(now)}.zip`)
+    const outPath = args.outputPath ?? join(defaultExportDir(), `${args.name}-${todayIsoDate(now)}.zip`)
     mkdirSync(join(outPath, ".."), { recursive: true })
 
     const zip = new AdmZip()

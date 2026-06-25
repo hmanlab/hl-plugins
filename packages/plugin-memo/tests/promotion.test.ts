@@ -4,11 +4,7 @@ import { describe, it, expect } from "bun:test"
 import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { withTmpHome } from "./_helpers.ts"
-import {
-  ensureHome,
-  hmanlabHome,
-  projectsDirPath,
-} from "../src/config.ts"
+import { ensureHome, hmanlabHome, projectsDirPath } from "../src/config.ts"
 import { openProjectDb, openRootDb } from "../src/db.ts"
 import { projectDbPath, projectRegister } from "../src/project/registry.ts"
 import {
@@ -62,9 +58,7 @@ describe("memory_supersede", () => {
       memorySave(db, { content: "v1", scope: "project", project_id: "ftmo" })
       memorySave(db, { content: "v2", scope: "project", project_id: "ftmo" })
       memorySupersede(db, 1, 2, "project")
-      expect(() => memoryUpdate(db, 1, "project", { importance: 0.9 })).toThrow(
-        /superseded by 2/,
-      )
+      expect(() => memoryUpdate(db, 1, "project", { importance: 0.9 })).toThrow(/superseded by 2/)
     })
   })
 })
@@ -74,9 +68,7 @@ describe("memory_promote (pin)", () => {
     await withProjectDb("ftmo", async (db) => {
       memorySave(db, { content: "durable rule", scope: "project", project_id: "ftmo" })
       memoryPromote(db, 1, "project")
-      const row = db
-        .prepare("SELECT is_pinned FROM memories WHERE id = 1")
-        .get() as { is_pinned: number }
+      const row = db.prepare("SELECT is_pinned FROM memories WHERE id = 1").get() as { is_pinned: number }
       expect(row.is_pinned).toBe(1)
     })
   })
@@ -90,9 +82,10 @@ describe("memory_archive", () => {
       memorySave(db, { content: "c", scope: "project", project_id: "ftmo" })
       const n = memoryArchive(db, [1, 3], "project")
       expect(n).toBe(2)
-      const archived = db
-        .prepare("SELECT id, is_archived FROM memories ORDER BY id")
-        .all() as Array<{ id: number; is_archived: number }>
+      const archived = db.prepare("SELECT id, is_archived FROM memories ORDER BY id").all() as Array<{
+        id: number
+        is_archived: number
+      }>
       expect(archived.find((r) => r.id === 1)?.is_archived).toBe(1)
       expect(archived.find((r) => r.id === 2)?.is_archived).toBe(0)
       expect(archived.find((r) => r.id === 3)?.is_archived).toBe(1)

@@ -1,12 +1,7 @@
 // Decay engine tests: multiplier values + pin/cold/expire paths.
 
 import { describe, it, expect } from "bun:test"
-import {
-  decayMultiplier,
-  shouldMarkCold,
-  shouldMarkExpired,
-  type DecayRow,
-} from "../src/decay/engine.ts"
+import { decayMultiplier, shouldMarkCold, shouldMarkExpired, type DecayRow } from "../src/decay/engine.ts"
 import { DEFAULT_DECAY_POLICY } from "../src/decay/policy.ts"
 
 const DAY = 24 * 60 * 60 * 1000

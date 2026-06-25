@@ -4,12 +4,7 @@ import { describe, it, expect } from "bun:test"
 import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { withTmpHome } from "./_helpers.ts"
-import {
-  ensureHome,
-  hmanlabHome,
-  personasDirPath,
-  projectsDirPath,
-} from "../src/config.ts"
+import { ensureHome, hmanlabHome, personasDirPath, projectsDirPath } from "../src/config.ts"
 import { openProjectDb, openRootDb } from "../src/db.ts"
 import { projectDbPath, projectRegister } from "../src/project/registry.ts"
 import { setBuiltins, syncFromDisk, extractStarterPack } from "../src/persona/registry.ts"

@@ -56,12 +56,7 @@ export function extractStarterPack(destDir: string): string[] {
  * Synchronous DB upsert for a single persona. Used by syncFromDisk (which
  * runs many) and the create/update tools (which run one).
  */
-function upsertPersonaRow(
-  db: Database,
-  p: Persona,
-  isBuiltin: boolean,
-  now: number,
-): void {
+function upsertPersonaRow(db: Database, p: Persona, isBuiltin: boolean, now: number): void {
   db.prepare(
     `INSERT INTO ai_personas
        (name, version, description, voice, traits, system_prompt,
@@ -100,9 +95,10 @@ function upsertPersonaRow(
 export function syncFromDisk(db: Database, dir: string) {
   const { personas, errors } = loadAllFromDir(dir)
   const existing = new Map<string, number>()
-  for (const row of db
-    .prepare("SELECT name, is_archived FROM ai_personas")
-    .all() as Array<{ name: string; is_archived: number }>) {
+  for (const row of db.prepare("SELECT name, is_archived FROM ai_personas").all() as Array<{
+    name: string
+    is_archived: number
+  }>) {
     existing.set(row.name, row.is_archived)
   }
 
@@ -188,9 +184,9 @@ export function updatePersona(
   name: string,
   patch: Partial<Omit<Persona, "name" | "version">>,
 ): { persona: Persona; file: string } {
-  const row = db
-    .prepare("SELECT * FROM ai_personas WHERE name = ?")
-    .get(name) as Record<string, unknown> | undefined
+  const row = db.prepare("SELECT * FROM ai_personas WHERE name = ?").get(name) as
+    | Record<string, unknown>
+    | undefined
   if (!row) {
     throw new Error(`Persona "${name}" not found`)
   }
@@ -230,9 +226,9 @@ export function clonePersona(
   if (!/^[a-z0-9-]+$/.test(newName)) {
     throw new Error("new_name must be kebab-case (lowercase letters, digits, hyphens)")
   }
-  const source = db
-    .prepare("SELECT * FROM ai_personas WHERE name = ?")
-    .get(sourceName) as Record<string, unknown> | undefined
+  const source = db.prepare("SELECT * FROM ai_personas WHERE name = ?").get(sourceName) as
+    | Record<string, unknown>
+    | undefined
   if (!source) {
     throw new Error(`Source persona "${sourceName}" not found`)
   }
@@ -262,10 +258,7 @@ export function deletePersona(db: Database, name: string): void {
   if (!row) {
     throw new Error(`Persona "${name}" not found`)
   }
-  db.prepare("UPDATE ai_personas SET is_archived = 1, updated_at = ? WHERE name = ?").run(
-    Date.now(),
-    name,
-  )
+  db.prepare("UPDATE ai_personas SET is_archived = 1, updated_at = ? WHERE name = ?").run(Date.now(), name)
 }
 
 /** Write a persona to disk as YAML. Caller picks the directory. */
