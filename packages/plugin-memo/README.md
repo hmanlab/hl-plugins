@@ -2,13 +2,130 @@
 
 Local-first MCP server for persistent, persona-aware memory across projects.
 
-`memo` ships two surfaces: an MCP server (33 tools) for AI clients like
+`memo` ships two surfaces: an MCP server (35 tools) for AI clients like
 Claude Code, and a Node CLI (`hmanlab-memory`) for power users. Both
 share the same backend — the CLI is a thin wrapper, not a re-implementation.
 
 Everything lives under `~/.hmanlab/`: one root SQLite DB + a `personas/`
 directory of YAML files + one DB per registered project. No cloud, no
 account, no telemetry.
+
+## What `npx -y @hmanlab/hl-plugins install memo` does
+
+It's the one-line path to a working setup. It runs five steps, in order:
+
+1. **Pre-flight.** Node ≥ 18, an `~/.opencode/` config dir. Auto-creates
+   the dir if missing.
+2. **Install Bun.** Memo is built with `--target=bun`, so Bun is a hard
+   requirement. The installer auto-installs it via
+   `curl -fsSL https://bun.sh/install | bash` if it isn't on PATH yet.
+3. **Stage the plugin CLI.** Copies `dist/cli.js` to
+   `~/.local/share/hl-plugins/memo/` so the next step can invoke plugin
+   subcommands by absolute path (no PATH dependency yet).
+4. **Prompt about MiniLM.** *See the section below.* Your answer is
+   persisted during install — there's no "run later" step.
+5. **Copy + register.** Ships the MCP server bundle to
+   `~/.local/share/hl-plugins/memo/memo-mcp-server.js`, drops the skill
+   markdown at `~/.claude/skills/memo/SKILL.md`, and registers the server
+   in your Claude Code config. Then prints
+   *"Restart opencode to use the new tools."*
+
+That's it. No auth, no account, no telemetry, no daemon. The server runs
+on stdio only when Claude Code invokes it.
+
+### Optional: the MiniLM embedder
+
+After Bun is confirmed and before any files are copied, the installer asks
+once whether you want the optional MiniLM-L6-v2 model. The model powers
+semantic search — paraphrase and typo queries still hit the right memory
+even when the words don't match the stored content literally.
+
+```
+? MiniLM-L6-v2 (~25 MB) powers semantic search so paraphrase and typo queries
+  still hit the right memory.
+
+  With it:    73.3% recall@5
+  Without it: paraphrase queries drop to ~30%
+              (30-seed eval across coding, glossary, and preferences)
+
+Enable? [Y/n]:
+```
+
+Your answer is committed during install — no follow-up step:
+
+- **Y (default):** writes `embedder_mode: minilm` to
+  `~/.hmanlab/config.yaml`. The model downloads lazily on the next
+  `memory_save` / `memory_search` call (~25 MB, ~2 s warmup, then ~50 ms
+  per query).
+- **n:** writes `embedder_mode: hash`. `loadExtractor()` short-circuits
+  on every subsequent call. The model is **never** downloaded or
+  referenced — the embedder uses the deterministic trigram fallback.
+
+Non-interactive installs (CI, scripts piped via `| sh`) treat the prompt
+as Yes so the install never blocks.
+
+Change your mind any time:
+
+```bash
+hmanlab-memory embedder status     # show current mode
+hmanlab-memory embedder install    # switch to minilm (lazy download on next memory call)
+hmanlab-memory embedder disable    # switch to hash (no download, ever)
+```
+
+The mode is stored under `embedder_mode` in `~/.hmanlab/config.yaml`. Three
+values: `minilm` (require the real model), `hash` (use the deterministic
+trigram fallback), `auto` (try MiniLM, fall back to hash on failure —
+default if the key is absent).
+
+### With MiniLM vs without — what actually changes
+
+Same 30-seed corpus, same 105 positive + 20 negative queries. The only
+difference is the embedder mode.
+
+**Headline metrics:**
+
+| Metric | Hash fallback | MiniLM-L6-v2 | Δ |
+|---|---|---|---|
+| Recall@1 | 41.0% | 45.7% | +4.7 pp |
+| Recall@5 | 68.6% | 73.3% | +4.7 pp |
+| MRR | 0.516 | 0.564 | +0.048 |
+
+**By query kind (R@5):**
+
+| Kind | Hash | MiniLM | Δ |
+|---|---|---|---|
+| literal | 93.3% | 93.3% | 0 |
+| paraphrase | 60.0% | 66.7% | +6.7 |
+| typo | 53.3% | 63.3% | +10.0 |
+| negation | 70.0% | 60.0% | **−10.0** |
+| broad | 60.0% | 80.0% | +20.0 |
+
+**By domain (R@5):**
+
+| Domain | Hash | MiniLM | Δ |
+|---|---|---|---|
+| code | 40.0% | 25.7% | **−14.3** |
+| glossary | 64.5% | 93.5% | +29.0 |
+| preferences | 97.4% | 100.0% | +2.6 |
+
+**Two surprises worth knowing:**
+
+- **MiniLM is worse on negation queries** (−10 pp). Polarity words like
+  "never" / "don't" are literal in the stored memory, so FTS catches
+  them; the vector branch dilutes that signal by surface-similarity to
+  other memories that share non-polarity vocabulary.
+- **MiniLM is also worse on the coding domain** (−14.3 pp). The 30-seed
+  code-style vocabulary is narrow enough that trigram overlap beats
+  cosine. MiniLM's paraphrase coverage helps when the query is short or
+  fuzzy, but on this corpus the FTS branch already covers most matches.
+
+If your memory is mostly short, literal preferences and short rules,
+hash is competitive. If your memory is mostly glossary definitions and
+fuzzy paraphrases — MiniLM earns its ~25 MB.
+
+Raw eval data: `~/Desktop/memo-eval/results-2026-06-25-bigeval.json`
+(MiniLM) and `~/Desktop/memo-eval/results-2026-06-25-bigeval-hash.json`
+(hash fallback).
 
 ## What's in the box (v1.0.0)
 
@@ -49,46 +166,6 @@ hmanlab-memory mcp-config claude-code   # prints `claude mcp add hmanlab-memory 
 The CLI auto-installs Bun if missing and registers the MCP bundle
 under `~/.local/share/hl-plugins/memo/`, then wires it into
 `~/.claude.json`.
-
-### Optional: the MiniLM embedder
-
-`hl-plugins install memo` prompts once before completing the install:
-
-```
-? MiniLM-L6-v2 (~25 MB) powers semantic search so paraphrase and typo queries
-  still hit the right memory.
-
-  With it:    73.3% recall@5
-  Without it: paraphrase queries drop to ~30%
-              (30-seed eval across coding, glossary, and preferences)
-
-Enable? [Y/n]:
-```
-
-- **Y (default):** the install writes `embedder_mode: minilm` to
-  `~/.hmanlab/config.yaml`. The model downloads lazily on the next
-  `memory_save` / `memory_search` call (~25 MB, ~2 s warmup, then ~50 ms
-  per query). The choice is committed — there's no "did it really install?"
-  follow-up.
-- **n:** the install writes `embedder_mode: hash` and `loadExtractor()`
-  short-circuits on every subsequent call. The model is **never** downloaded
-  or referenced.
-- **Non-interactive installs** (CI, scripts piped via `| sh`): the prompt is
-  skipped and treated as Yes. Run `hmanlab-memory embedder disable`
-  afterwards if you want to flip it without re-installing.
-
-Change your mind any time:
-
-```bash
-hmanlab-memory embedder status     # show current mode
-hmanlab-memory embedder install    # switch to minilm (lazy download on next memory call)
-hmanlab-memory embedder disable    # switch to hash (no download, ever)
-```
-
-The mode is stored under `embedder_mode` in `~/.hmanlab/config.yaml`. Three
-values: `minilm` (require the real model), `hash` (use the deterministic
-trigram fallback), `auto` (try MiniLM, fall back to hash on failure —
-default if the key is absent).
 
 ## CLI quickstart
 
