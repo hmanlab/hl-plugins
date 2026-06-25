@@ -22,14 +22,16 @@ $EDITOR packages/plugin-mmx/package.json
 $EDITOR packages/plugin-mmx-claude/package.json
 $EDITOR packages/plugin-multiplayer/package.json
 $EDITOR packages/multiplayer-watch/package.json
+$EDITOR packages/plugin-memo/package.json
 git add -A
 git commit -am "chore(publish): bump to 0.X.Y"
 
 # (A) publish from this machine  ← most common
-npm run publish:cli
+npm publish --workspace packages/plugin-memo --access public
 npm publish --workspace packages/plugin-mmx --access public
 npm publish --workspace packages/plugin-mmx-claude --access public
 npm publish --workspace packages/plugin-multiplayer --access public
+npm run publish:cli
 
 # OR (B) tag for CI  ← needs NPM_TOKEN set in repo secrets
 git tag v0.X.Y
@@ -59,7 +61,7 @@ packages/cli --access public`.
 
 **Per-release:**
 
-1. Bump `version` in all package.json files (cli, plugin-mmx, plugin-mmx-claude, plugin-multiplayer, multiplayer-watch).
+1. Bump `version` in all package.json files (cli, plugin-mmx, plugin-mmx-claude, plugin-multiplayer, multiplayer-watch, plugin-memo).
 2. `git commit -am "chore(publish): bump to 0.X.Y"`.
 3. `git push origin main`.
 4. Publish plugin packages first (CLI depends on them being on npm):
@@ -67,6 +69,7 @@ packages/cli --access public`.
    npm publish --workspace packages/plugin-mmx --access public
    npm publish --workspace packages/plugin-mmx-claude --access public
    npm publish --workspace packages/plugin-multiplayer --access public
+   npm publish --workspace packages/plugin-memo --access public
    ```
 5. Publish the CLI:
    ```bash
@@ -100,7 +103,7 @@ Defined in `.github/workflows/publish.yml`. Triggered by pushing a
 
 **Per-release:**
 
-1. Bump `version` in all package.json files (cli, plugin-mmx, plugin-mmx-claude, plugin-multiplayer, multiplayer-watch).
+1. Bump `version` in all package.json files (cli, plugin-mmx, plugin-mmx-claude, plugin-multiplayer, multiplayer-watch, plugin-memo).
 2. `git commit -am "chore(publish): bump to 0.X.Y"`.
 3. `git push origin main`.
 4. `git tag v0.X.Y && git push origin main --tags`.
@@ -138,14 +141,32 @@ commit or rely on the workflow to do it, the publish step succeeds.
   - `@hmanlab/mmx-claude` — Claude Code MCP adapter for MiniMax
   - `@hmanlab/multiplayer` — OpenCode multiplayer plugin
   - `@hmanlab/multiplayer-watch` — companion TUI for multiplayer
-- Bin name: `hl-plugins` (unchanged, so `hl-plugins install mmx` still
-  works after `npm i -g @hmanlab/hl-plugins`)
+  - `@hmanlab/memo` — local-first MCP memory server (personas, projects,
+    decay, conflict detection, sessions, memory graph, project export/
+    import). Also exposes a Node CLI binary `hmanlab-memory` via the
+    `bin` field in its `package.json`. Two install paths: standalone
+    (`pnpm install -g @hmanlab/memo`) and via `hl-plugins install memo`.
+- Bin names:
+  - `hl-plugins` — the CLI installer (unchanged, so
+    `hl-plugins install mmx` still works after
+    `npm i -g @hmanlab/hlugins`).
+  - `hmanlab-memory` — the memo plugin's CLI. Lands on PATH when
+    `@hmanlab/memo` is installed globally; powers the
+    `hmanlab-memory init / project / memory / status / config / mcp-config`
+    commands documented in `packages/plugin-memo/docs/USAGE.md`.
 - Tarball provenance: signed when published via CI (Flow B). Local
   publishes (Flow A) don't attach provenance — that's fine, npm accepts
   both.
 - `opencode/` directory is in the `files` field of `packages/cli/package.json`
   but doesn't exist in the CLI package — npm silently ignores missing
   paths in `files`, so the tarball is unaffected.
+- The memo plugin's `package.json` `files` field lists
+  `["bin", "claude", "dist", "README.md"]`. The `claude/` directory
+  ships a Claude Code skill markdown; `dist/` contains both the MCP
+  bundle (`memo-mcp-server.js`) and the CLI bundle (`cli.js`); `bin/`
+  ships the CLI entry shim (`hmanlab-memory.js`). All three must exist
+  locally at publish time or `npm publish` errors out — the bun
+  build step produces `dist/`; `bin/` and `claude/` are committed.
 - There is an unrelated unscoped `hmanlab` package on the registry
   (owned by someone else) — distinct from our scope. Ignore.
 
