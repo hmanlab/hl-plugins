@@ -20,8 +20,26 @@ Install one or more plugins into the user's OpenCode config.
 - Idempotent — safe to re-run
 - Auto-installs required binaries (e.g. `mmx-cli`) if missing
 - Prompts for credentials when needed (input hidden)
+- Prompts when the plugin declares an optional local model (e.g. `memo` → MiniLM)
 - Updates `~/.opencode/config.json` additively
 - Prints "Restart opencode to use the new tools" at the end
+
+**Optional-model prompt**
+
+Plugins that ship an optional local model declare it under `hl-plugins.embedder`
+in their `package.json`. The installer surfaces that contract to the user as a
+Y/n prompt with concrete before/after numbers from the project's own eval.
+
+- **Y** writes `embedder_mode: minilm` to the plugin's config. The model
+  downloads lazily on the next memory call (~25 MB, ~2 s warmup).
+- **n** writes `embedder_mode: hash`. The model is **never** downloaded.
+
+The choice is committed during install via plugin subcommands invoked through
+the copied CLI bundle — no "run later" escape hatch. Non-interactive installs
+(CI, piped scripts) treat the prompt as Yes.
+
+To change the choice after install, run the plugin's own toggle subcommand
+(`hmanlab-memory embedder install` / `hmanlab-memory embedder disable`).
 
 **Examples**
 
@@ -29,6 +47,7 @@ Install one or more plugins into the user's OpenCode config.
 hl-plugins install
 hl-plugins install mmx
 hl-plugins install mmx --no-auth      # skip auth prompt (use existing session)
+hl-plugins install memo               # prompts about MiniLM
 ```
 
 **Exit codes**

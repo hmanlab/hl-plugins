@@ -37,14 +37,14 @@ describe("memory_search (FTS keyword match)", () => {
     await withTmpHome(async () => {
       const db = await newProjectDb("ftmo")
       try {
-        memorySave(db, {
+        await memorySave(db, {
           content: "FTMO daily loss limit is 5 percent of account",
           category: "rules",
           importance: 0.9,
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(db, {
+        await memorySave(db, {
           content: "London open breakout with 1:2 RR",
           category: "strategy",
           scope: "project",
@@ -53,7 +53,7 @@ describe("memory_search (FTS keyword match)", () => {
 
         const rootDb = openRootDb()
         try {
-          const result = memorySearch(rootDb, {
+          const result = await memorySearch(rootDb, {
             query: "daily loss",
             scope: "project",
             projectDb: db,
@@ -62,7 +62,7 @@ describe("memory_search (FTS keyword match)", () => {
           expect(result.results.length).toBeGreaterThan(0)
           expect(result.results[0]?.id).toBe(1)
           expect(result.results[0]?.score).toBeGreaterThan(0)
-          expect(result.mode).toBe("fts") // vec0 not loaded in bun
+          expect(result.mode).toBe("hybrid") // FTS + recency + JS cosine
         } finally {
           rootDb.close()
         }
@@ -78,13 +78,13 @@ describe("memory_search (RRF fusion)", () => {
     await withTmpHome(async () => {
       const db = await newProjectDb("ftmo")
       try {
-        memorySave(db, {
+        await memorySave(db, {
           content: "FTMO daily loss limit rules",
           category: "rules",
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(db, {
+        await memorySave(db, {
           content: "completely unrelated cooking recipe",
           category: "other",
           scope: "project",
@@ -92,7 +92,7 @@ describe("memory_search (RRF fusion)", () => {
         })
         const rootDb = openRootDb()
         try {
-          const result = memorySearch(rootDb, {
+          const result = await memorySearch(rootDb, {
             query: "FTMO daily loss",
             scope: "project",
             projectDb: db,
@@ -114,9 +114,9 @@ describe("memory_recent", () => {
     await withTmpHome(async () => {
       const db = await newProjectDb("ftmo")
       try {
-        memorySave(db, { content: "old", scope: "project", project_id: "ftmo" })
+        await memorySave(db, { content: "old", scope: "project", project_id: "ftmo" })
         await new Promise((r) => setTimeout(r, 5))
-        memorySave(db, { content: "new", scope: "project", project_id: "ftmo" })
+        await memorySave(db, { content: "new", scope: "project", project_id: "ftmo" })
 
         const rootDb = openRootDb()
         try {
@@ -143,13 +143,13 @@ describe("category filter", () => {
     await withTmpHome(async () => {
       const db = await newProjectDb("ftmo")
       try {
-        memorySave(db, {
+        await memorySave(db, {
           content: "FTMO rule about risk",
           category: "rules",
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(db, {
+        await memorySave(db, {
           content: "FTMO strategy about entries",
           category: "strategy",
           scope: "project",
@@ -157,7 +157,7 @@ describe("category filter", () => {
         })
         const rootDb = openRootDb()
         try {
-          const result = memorySearch(rootDb, {
+          const result = await memorySearch(rootDb, {
             query: "FTMO",
             category: "rules",
             scope: "project",
@@ -180,20 +180,20 @@ describe("persona filter (inclusive)", () => {
     await withTmpHome(async () => {
       const db = await newProjectDb("ftmo")
       try {
-        memorySave(db, {
+        await memorySave(db, {
           content: "trading-specific insight",
           persona_id: "trading",
           scope: "project",
           project_id: "ftmo",
         })
         db.prepare("UPDATE memories SET persona_id = NULL WHERE id = 1").run()
-        memorySave(db, {
+        await memorySave(db, {
           content: "shared insight no persona",
           scope: "project",
           project_id: "ftmo",
         })
         db.prepare("UPDATE memories SET persona_id = NULL WHERE id = 2").run()
-        memorySave(db, {
+        await memorySave(db, {
           content: "creative-only unrelated note",
           persona_id: "creative",
           scope: "project",
@@ -201,7 +201,7 @@ describe("persona filter (inclusive)", () => {
         })
         const rootDb = openRootDb()
         try {
-          const result = memorySearch(rootDb, {
+          const result = await memorySearch(rootDb, {
             query: "insight",
             persona_id: "trading",
             scope: "project",
@@ -227,11 +227,11 @@ describe("global scope search", () => {
       ensureHome()
       const rootDb = openRootDb()
       try {
-        memorySave(rootDb, {
+        await memorySave(rootDb, {
           content: "global backup rule",
           scope: "global",
         })
-        const result = memorySearch(rootDb, {
+        const result = await memorySearch(rootDb, {
           query: "backup",
           scope: "global",
         })
@@ -249,20 +249,23 @@ describe("memory_semantic_search", () => {
     await withTmpHome(async () => {
       const db = await newProjectDb("ftmo")
       try {
-        memorySave(db, {
+        await memorySave(db, {
           content: "FTMO daily loss limit is 5 percent of account",
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(db, {
+        await memorySave(db, {
           content: "London weather forecast tomorrow",
           scope: "project",
           project_id: "ftmo",
         })
         const rootDb = openRootDb()
         try {
-          const result = memorySemanticSearch(rootDb, {
-            query: "risk threshold for prop firm",
+          // The hash embedder scores shingle overlap, not true semantic
+          // similarity, so the query must share literal substrings with the
+          // expected row to rank above the unrelated one.
+          const result = await memorySemanticSearch(rootDb, {
+            query: "FTMO daily loss percent account",
             top_k: 2,
             scope: "project",
             projectDb: db,
@@ -287,7 +290,7 @@ describe("perf smoke — 1000 saves in <60s", () => {
       try {
         const start = Date.now()
         for (let i = 0; i < 1000; i++) {
-          memorySave(db, {
+          await memorySave(db, {
             content: `memory number ${i} about topic ${i % 50}`,
             category: i % 2 === 0 ? "rules" : "strategy",
             importance: 0.5,

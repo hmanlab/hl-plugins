@@ -44,7 +44,7 @@ async function withActiveProject<T>(
 describe("memory_save", () => {
   it("inserts a row + FTS5 entry", async () => {
     await withActiveProject("ftmo", async (db) => {
-      const result = memorySave(db, {
+      const result = await memorySave(db, {
         content: "FTMO daily loss limit is 5 percent of account",
         category: "rules",
         importance: 0.9,
@@ -77,7 +77,7 @@ describe("memory_save", () => {
       ensureHome()
       const rootDb = openRootDb()
       try {
-        const result = memorySave(rootDb, {
+        const result = await memorySave(rootDb, {
           content: "A global rule about backups",
           category: "rules",
           importance: 0.8,
@@ -100,7 +100,7 @@ describe("memory_save", () => {
 describe("memory_get", () => {
   it("returns the full row and bumps access_count", async () => {
     await withActiveProject("ftmo", async (db) => {
-      memorySave(db, {
+      await memorySave(db, {
         content: "test",
         scope: "project",
         project_id: "ftmo",
@@ -119,11 +119,11 @@ describe("memory_get", () => {
 describe("memory_update", () => {
   it("re-embeds and reindexes FTS5 when content changes", async () => {
     await withActiveProject("ftmo", async (db) => {
-      memorySave(db, { content: "alpha", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "alpha", scope: "project", project_id: "ftmo" })
       const before = db.prepare("SELECT embedding FROM memories WHERE id = ?").get(1) as {
         embedding: Uint8Array
       }
-      const result = memoryUpdate(db, 1, "project", { content: "beta" })
+      const result = await memoryUpdate(db, 1, "project", { content: "beta" })
       expect(result.reembedded).toBe(true)
       const after = db.prepare("SELECT embedding FROM memories WHERE id = ?").get(1) as {
         embedding: Uint8Array
@@ -144,11 +144,11 @@ describe("memory_update", () => {
 
   it("importance-only update does not re-embed", async () => {
     await withActiveProject("ftmo", async (db) => {
-      memorySave(db, { content: "x", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "x", scope: "project", project_id: "ftmo" })
       const before = db.prepare("SELECT embedding FROM memories WHERE id = ?").get(1) as {
         embedding: Uint8Array
       }
-      const result = memoryUpdate(db, 1, "project", { importance: 0.2 })
+      const result = await memoryUpdate(db, 1, "project", { importance: 0.2 })
       expect(result.reembedded).toBe(false)
       const after = db.prepare("SELECT embedding FROM memories WHERE id = ?").get(1) as {
         embedding: Uint8Array
@@ -161,7 +161,7 @@ describe("memory_update", () => {
 describe("memory_delete", () => {
   it("removes the row and its FTS5 mirror", async () => {
     await withActiveProject("ftmo", async (db) => {
-      memorySave(db, { content: "deleteme", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "deleteme", scope: "project", project_id: "ftmo" })
       memoryDelete(db, 1, "project")
       const row = memoryGet(db, 1, "project")
       expect(row).toBeNull()
@@ -186,12 +186,12 @@ describe("project isolation", () => {
         const ftmoDb = new Database(projectDbPath(projectsDirPath(), "ftmo"))
         const courseDb = new Database(projectDbPath(projectsDirPath(), "course"))
         try {
-          memorySave(ftmoDb, {
+          await memorySave(ftmoDb, {
             content: "FTMO only — daily loss limit",
             scope: "project",
             project_id: "ftmo",
           })
-          memorySave(courseDb, {
+          await memorySave(courseDb, {
             content: "Course only — lesson plan",
             scope: "project",
             project_id: "course",
@@ -232,12 +232,12 @@ describe("no-active-project error contract", () => {
       try {
         const switcher = new ProjectSwitcher(rootDb, () => projectsDirPath())
         expect(switcher.getActive()).toBeNull()
-        expect(() =>
+        await expect(
           memorySave({} as import("bun:sqlite").Database, {
             content: "x",
             scope: "project",
           }),
-        ).toThrow() // sanity check that we never even reach the DB
+        ).rejects.toThrow() // sanity check that we never even reach the DB
         // The actual contract check: requireActive throws NoActiveProjectError
         // with the exact message.
         expect(() => {

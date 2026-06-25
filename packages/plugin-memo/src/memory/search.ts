@@ -6,21 +6,22 @@
 // scope values ("project", "global") keep Phase 03 behavior.
 //
 // Hybrid (memory_search):
-//   1. Embed the query (one vector for cosine KNN — best-effort, no-op if
-//      vec0 not loaded).
-//   2. For each target DB, FTS top-K + recency top-K + vector top-K (best
-//      effort; JS-side cosine over the candidate union when vec0 not loaded).
+//   1. Embed the query (one vector for cosine KNN).
+//   2. For each target DB, FTS top-K + recency top-K. Then JS-side cosine
+//      over each candidate's stored embedding BLOB (vector branch).
 //   3. RRF fusion (k_const=60) across the union of all DBs.
 //   4. Decay placeholder (90d / 0.3 importance → 0.5×).
 //   5. Category + persona filters (persona filter is inclusive by default,
 //      strict mode opt-in via config.persona_filter_mode).
 //   6. Sort by fused score DESC; take top `limit`.
+//
+// Note: the `mode` field is always "hybrid" — vector scoring happens
+// unconditionally via JS cosine over the embedding BLOB on each row.
 
 import type { Database } from "bun:sqlite"
 import { cosineSimilarity, getEmbedder, type Embedding } from "../embedder.js"
 import type { MemoryRow, Scope } from "./crud.js"
 import { applyDecayPlaceholder, rrfFusion, type RankedCandidate } from "./rank.js"
-import { vectorIndexAvailable } from "../project/schema.js"
 
 export type SearchResultRow = MemoryRow & { score?: number; source_db: string }
 
@@ -29,8 +30,8 @@ export type SearchResponse = {
   total_candidates: number
   embed_ms: number
   search_ms: number
-  /** Set to "fts" when vec0 isn't loaded; "hybrid" otherwise. */
-  mode: "fts" | "hybrid"
+  /** Always "hybrid" — FTS + recency + JS-cosine vector scoring. */
+  mode: "hybrid"
 }
 
 export type CrossDbScope = "all" | "global" | "project"
@@ -68,6 +69,8 @@ function rowFromRecord(r: Record<string, unknown>): MemoryRow {
     superseded_by: (r["superseded_by"] as number | null) ?? null,
     created_at: r["created_at"] as number,
     updated_at: r["updated_at"] as number,
+    // Search reads this BLOB for JS-side cosine — see MemoryRow.embedding.
+    embedding: r["embedding"] as ArrayBuffer | Uint8Array | null | undefined,
   }
 }
 
@@ -124,7 +127,7 @@ type DbTarget = {
  * memories table AND root.db.global_memories in sequence, tags each row with
  * `source_db`, and fuses with RRF.
  */
-export function memorySearch(
+export async function memorySearch(
   rootDb: Database,
   args: {
     query: string
@@ -138,7 +141,7 @@ export function memorySearch(
     /** Persona filter mode. Default: "inclusive". */
     personaFilterMode?: "inclusive" | "strict"
   },
-): SearchResponse {
+): Promise<SearchResponse> {
   const t0 = performance.now()
   const limit = args.limit ?? 10
   const scope = args.scope
@@ -158,11 +161,11 @@ export function memorySearch(
 
   const embedder = getEmbedder()
   const embedStart = performance.now()
-  const qVec: Embedding = args.query ? embedder.embed(args.query) : new Float32Array(0)
+  const qVec: Embedding = args.query ? await embedder.embed(args.query) : new Float32Array(0)
   const embedMs = performance.now() - embedStart
 
   const ftsQ = ftsQuery(args.query)
-  const mode = vectorIndexAvailable(targets[0]?.db ?? rootDb) && qVec.length > 0 ? "hybrid" : "fts"
+  const hasQueryVec = qVec.length > 0
 
   const allCandidates: Array<MemoryRow & { source_db: string }> = []
   const allFtsLists: RankedCandidate[] = []
@@ -185,7 +188,7 @@ export function memorySearch(
         rank: i + 1,
       })),
     )
-    if (mode === "hybrid") {
+    if (hasQueryVec) {
       const scored = cands.map((c) => {
         const cVec = c.embedding ? readEmbedding(c.embedding as ArrayBuffer) : null
         const sim = cVec ? cosineSimilarity(qVec, cVec) : 0
@@ -204,7 +207,10 @@ export function memorySearch(
     taggedRowMap.set(taggedId(c.source_db, c.id), c)
   }
 
-  let fused = rrfFusion([allFtsLists, allRecencyLists, allVectorLists])
+  // Weighted RRF: vector (semantic) gets 2×, FTS (literal) gets 1×, recency
+  // gets 0.5×. On small corpora recency covers most memories and drowns out
+  // the vector signal; down-weighting it lets the cosine ordering win.
+  let fused = rrfFusion([allFtsLists, allRecencyLists, allVectorLists], [1.0, 0.5, 2.0])
   fused = applyDecayPlaceholder(
     fused,
     new Map(
@@ -245,7 +251,7 @@ export function memorySearch(
     total_candidates: allCandidates.length,
     embed_ms: Math.round(embedMs * 100) / 100,
     search_ms: Math.round((performance.now() - t0) * 100) / 100,
-    mode,
+    mode: "hybrid",
   }
 }
 
@@ -261,7 +267,7 @@ function taggedId(source: string, id: number): string {
  * Vector-only semantic search. MVP path is cosine over the full pool. Cross-DB
  * with `scope="all"` concatenates global + project pools.
  */
-export function memorySemanticSearch(
+export async function memorySemanticSearch(
   rootDb: Database,
   args: {
     query: string
@@ -271,14 +277,14 @@ export function memorySemanticSearch(
     projectDb?: Database
     projectName?: string | null
   },
-): SearchResponse {
+): Promise<SearchResponse> {
   const t0 = performance.now()
   const topK = args.top_k ?? 10
   const scope = args.scope
 
   const embedder = getEmbedder()
   const embedStart = performance.now()
-  const qVec = embedder.embed(args.query)
+  const qVec = await embedder.embed(args.query)
   const embedMs = performance.now() - embedStart
 
   const targets: DbTarget[] = []
@@ -293,7 +299,6 @@ export function memorySemanticSearch(
     })
   }
 
-  const mode = vectorIndexAvailable(targets[0]?.db ?? rootDb) ? "hybrid" : "fts"
   const allCandidates: Array<MemoryRow & { source_db: string }> = []
   for (const target of targets) {
     const { row } = tableFor(target.scope)
@@ -328,7 +333,7 @@ export function memorySemanticSearch(
     total_candidates: allCandidates.length,
     embed_ms: Math.round(embedMs * 100) / 100,
     search_ms: Math.round((performance.now() - t0) * 100) / 100,
-    mode,
+    mode: "hybrid",
   }
 }
 

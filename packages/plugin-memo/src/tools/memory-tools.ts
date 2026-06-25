@@ -31,6 +31,8 @@ import { memoryRecent, memorySearch, memorySemanticSearch, type CrossDbScope } f
 import { detectConflict } from "../conflict/detector.js"
 import { getEmbedder } from "../embedder.js"
 import { buildHygieneReport, type HygieneReport } from "../memory/hygiene.js"
+import { buildMemoryStatus } from "../memory/status.js"
+import { selectForCompaction } from "../memory/compaction.js"
 import { memoryLink, memoryRelated } from "../graph/edges.js"
 import { bootstrapEdges } from "../graph/schema.js"
 
@@ -85,7 +87,7 @@ export function registerMemoryTools(
         // target DB for similar + opposite-polarity memories in the same
         // category, return a conflict report if found (unless force=true).
         const embedder = getEmbedder()
-        const newVec = embedder.embed(args.content)
+        const newVec = await embedder.embed(args.content)
 
         const runSave = async (db: Database, projectName: string | null): Promise<unknown> => {
           if (!args.force) {
@@ -167,7 +169,7 @@ export function registerMemoryTools(
     "memory_update",
     {
       description:
-        "Update a memory. Re-embeds + reindexes FTS5 + vec0 if content changes. Only the fields you pass are updated.",
+        "Update a memory. Re-embeds and rewrites the embedding BLOB if content changes. FTS5 sync is automatic via triggers. Only the fields you pass are updated.",
       inputSchema: {
         id: z.number().int().positive(),
         content: z.string().optional(),
@@ -197,7 +199,7 @@ export function registerMemoryTools(
     "memory_delete",
     {
       description:
-        "Hard-delete a memory. FTS5 sync is automatic via triggers. vec0 is best-effort. Phase 05 will introduce memory_archive for soft delete.",
+        "Hard-delete a memory. FTS5 sync is automatic via triggers. Use memory_archive for soft delete instead — most callers want that.",
       inputSchema: {
         id: z.number().int().positive(),
         scope: z.enum(["project", "global"]).optional(),
@@ -515,6 +517,101 @@ export function registerMemoryTools(
         return jsonResult(report)
       } catch (err) {
         return textResult(`memory_hygiene failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_status ───────────────────────────────────────────────────
+  // Quick snapshot of the active project's memory state. Counts + token
+  // estimate + decay flags + index health. Cheaper than memory_hygiene
+  // because it doesn't classify rows or run cosine comparisons.
+  server.registerTool(
+    "memory_status",
+    {
+      description:
+        "Memory status snapshot for the active project and/or global scope. Reports counts, token estimate (chars/4), pinned/cold/expired/archived/superseded totals, last activity, breakdown by category and channel, FTS5 mirror health, and the active embedder kind ('minilm' | 'hash' | 'loading'). Cheaper than memory_hygiene. scope='project' (default) targets only the active project; 'global' targets root.db.global_memories; 'all' covers both.",
+      inputSchema: {
+        scope: z.enum(["all", "project", "global"]).optional(),
+      },
+    },
+    async (args) => {
+      const scope = (args.scope ?? "project") as "all" | "project" | "global"
+      try {
+        let projectDb: Database | null = null
+        let projectName: string | null = null
+        if (scope === "project" || scope === "all") {
+          const active = switcher.getActive()
+          if (!active) {
+            return textResult(
+              'no active project — call project_switch("<name>") first, or pass scope="global"',
+            )
+          }
+          projectDb = openProjectDb(active.db_path)
+          projectName = active.name
+        }
+        try {
+          const report = await buildMemoryStatus({
+            rootDb,
+            projectDb,
+            projectName,
+            scope,
+          })
+          return jsonResult(report)
+        } finally {
+          if (projectDb) projectDb.close()
+        }
+      } catch (err) {
+        return textResult(`memory_status failed: ${(err as Error).message}`)
+      }
+    },
+  )
+
+  // ─── memory_compact_prep ─────────────────────────────────────────────
+  // Pre-selects the memories that should survive a Claude Code compaction
+  // event. Selection: pinned first, then memories in the most-frequent
+  // category, then by importance × decay multiplier. Capped at maxItems
+  // (default 25) and maxTokens (default 4000).
+  server.registerTool(
+    "memory_compact_prep",
+    {
+      description:
+        "Select memories worth re-injecting after a Claude Code compaction event. Pinned memories are always included; then memories in the most-frequent category of the active project; then top-K by importance × decay multiplier. Capped by max_items (default 25) and max_tokens (default 4000). Returns the selected memories plus selection stats (pinned/recent_category/by_score counts, dropped count, capped by 'items'|'tokens'|'none'). Use this right before Claude Code compacts; the returned list is what to keep visible to the model after compaction.",
+      inputSchema: {
+        scope: z.enum(["all", "project", "global"]).optional(),
+        max_items: z.number().int().min(1).max(500).optional(),
+        max_tokens: z.number().int().min(100).max(50000).optional(),
+      },
+    },
+    async (args) => {
+      const scope = (args.scope ?? "project") as "all" | "project" | "global"
+      try {
+        let projectDb: Database | null = null
+        let projectName: string | null = null
+        if (scope === "project" || scope === "all") {
+          const active = switcher.getActive()
+          if (!active) {
+            return textResult(
+              'no active project — call project_switch("<name>") first, or pass scope="global"',
+            )
+          }
+          projectDb = openProjectDb(active.db_path)
+          projectName = active.name
+        }
+        try {
+          const prep = await selectForCompaction({
+            rootDb,
+            projectDb,
+            projectName,
+            scope,
+            maxItems: args.max_items,
+            maxTokens: args.max_tokens,
+          })
+          return jsonResult(prep)
+        } finally {
+          if (projectDb) projectDb.close()
+        }
+      } catch (err) {
+        return textResult(`memory_compact_prep failed: ${(err as Error).message}`)
       }
     },
   )

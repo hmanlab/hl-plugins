@@ -1,12 +1,14 @@
 // Project DB schema. Bootstrap on register; identical every time so the file
-// format is stable from day one. Phase 03 is the first user of `memories`,
-// `memories_fts`, and `memory_vectors`, but the schema was created in
-// Phase 02 so re-register (Phase 06 export/import) re-bootstraps idempotently
-// and Phase 03 doesn't need a migration step.
+// format is stable from day one. Phase 03 is the first user of `memories`
+// and `memories_fts`; the schema was created in Phase 02 so re-register
+// (Phase 06 export/import) re-bootstraps idempotently and Phase 03 doesn't
+// need a migration step.
 //
-// `memory_vectors` is sqlite-vec's vec0 virtual table. bun:sqlite does NOT
-// ship sqlite-vec, so we attempt to create it and tolerate failure — the
-// table simply won't exist in dev. Phase 03 search falls back to FTS-only.
+// Vector search reads the `embedding` BLOB on each row directly and scores
+// candidates with JS-side cosine at query time (see src/memory/search.ts).
+// bun:sqlite does not bundle sqlite-vec, so a vec0 virtual table is not
+// used here. If a future swap-in lands a real vec0 loader, the column
+// schema stays unchanged — only the index changes.
 //
 // Triggers keep `memories_fts` in sync with `memories`. The `superseded_by`
 // column is created now (Phase 03 hard-delete only) so Phase 05's conflict
@@ -69,18 +71,9 @@ CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
 END;
 `
 
-/** vec0 (sqlite-vec). Best-effort: creates the table if the extension is
- *  loaded; silently skipped otherwise. Phase 03 search falls back to FTS-only. */
-export const PROJECT_VECTOR_SCHEMA = `
-CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0(
-  id INTEGER PRIMARY KEY,
-  embedding float[384]
-);
-`
-
 /**
  * Apply the full project DB schema. Idempotent — safe to call on every
- * register. Vec0 is best-effort.
+ * register.
  */
 export function bootstrapProjectSchema(db: import("bun:sqlite").Database): void {
   db.exec(PROJECT_SCHEMA)
@@ -99,23 +92,4 @@ export function bootstrapProjectSchema(db: import("bun:sqlite").Database): void 
     MEMORY_EDGES_SCHEMA: string
   }
   db.exec(MEMORY_EDGES_SCHEMA)
-  try {
-    db.exec(PROJECT_VECTOR_SCHEMA)
-  } catch (err) {
-    process.stderr.write(
-      `[hmanlab-memo] note: vec0 extension not loaded; vector search disabled ` +
-        `(${(err as Error).message.split("\n")[0]}). FTS5-only fallback active.\n`,
-    )
-  }
-}
-
-/**
- * True iff vec0 loaded and `memory_vectors` exists in the schema.
- * Phase 03 search calls this to decide between hybrid and FTS-only paths.
- */
-export function vectorIndexAvailable(db: import("bun:sqlite").Database): boolean {
-  const row = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_vectors'")
-    .get() as { name: string } | null
-  return row !== null
 }

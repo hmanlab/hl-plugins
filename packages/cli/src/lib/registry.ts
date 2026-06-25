@@ -44,6 +44,44 @@ export type PluginAuth = {
   envVar?: string
 }
 
+/**
+ * Optional local model the plugin wants to use. The installer prompts the
+ * user (Y/n) before deferring the first download. Plugins should make the
+ * model truly optional — `disable` and `enable` commands toggle whether
+ * `getEmbedder()` returns the real model or a deterministic fallback.
+ */
+export type PluginEmbedder = {
+  /** Display name shown in the prompt (e.g. "MiniLM-L6-v2"). */
+  name: string
+  /** Approximate download size in MB, for the prompt. */
+  sizeMb: number
+  /** What the model does (1 sentence). */
+  purpose: string
+  /**
+   * Concrete accuracy / perf numbers from the project's own eval, so the
+   * user can see the tradeoff instead of trusting marketing copy.
+   * Example: { with: "73.3%", without: "25.7%", note: "on paraphrase queries" }.
+   */
+  tradeoff?: { with: string; without: string; note?: string }
+  /**
+   * Plugin subcommands (run sequentially via the copied CLI bundle) that
+   * prime the model: set the config flag, then trigger the actual download.
+   * Run on Yes. If any step exits non-zero, the install aborts so the user
+   * never ends up in a half-set-up state.
+   *
+   * Example: ["embedder install", "embedder warmup"]
+   */
+  preInstall?: string[]
+  /**
+   * Plugin subcommand (run via the copied CLI bundle) that persists the
+   * disabled state (sets embedder_mode to "hash" or equivalent). Run on No.
+   * Must be idempotent — re-running on an already-disabled install is a no-op.
+   *
+   * Example: ["embedder disable"]
+   */
+  disableCommand?: string[]
+}
+
 export type PluginManifest = {
   /** Kebab-case name, e.g. "mmx". */
   name: string
@@ -63,12 +101,21 @@ export type PluginManifest = {
     claudeMcp?: string
     /** Path (relative to packageDir) to a Claude Code skill markdown file. */
     claudeSkill?: string
+    /**
+     * Path (relative to packageDir) to a built CLI bundle (e.g. dist/cli.js).
+     * Copied next to the MCP bundle so install-time prompts can invoke plugin
+     * subcommands via absolute path without depending on PATH. Optional —
+     * only required for plugins that declare `embedder`.
+     */
+    cli?: string
     requires?: PluginRequirement[]
     auth?: PluginAuth
     postInstall?: string[]
     defaultInstall?: boolean
     /** bash permission pattern to add (e.g. "mmx *"). */
     permission?: string
+    /** Optional local model to prompt the user about before first use. */
+    embedder?: PluginEmbedder
   }
 }
 

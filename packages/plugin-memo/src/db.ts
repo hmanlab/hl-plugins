@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(is_archived);
 CREATE INDEX IF NOT EXISTS idx_projects_last_opened ON projects(last_opened_at);
 
--- Phase 03: global memories. Cross-project tier; FTS5-backed; no vec0 in MVP.
+-- Phase 03: global memories. Cross-project tier; FTS5-backed.
+-- Vector search reads the embedding BLOB on each row directly at query time.
 CREATE TABLE IF NOT EXISTS global_memories (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   content          TEXT    NOT NULL,
@@ -202,8 +203,8 @@ export function openProjectDb(path: string): Database {
   db.exec("PRAGMA foreign_keys = ON;")
   db.exec("PRAGMA synchronous = NORMAL;")
   // Apply the full project schema (memories + FTS5 + project_sessions +
-  // Phase 05 decay columns + best-effort vec0). Idempotent; safe to call on
-  // every open. Lazy-imported to avoid a circular dep with schema.ts.
+  // Phase 05 decay columns). Idempotent; safe to call on every open.
+  // Lazy-imported to avoid a circular dep with schema.ts.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { bootstrapProjectSchema } = require("./project/schema.js") as {
     bootstrapProjectSchema: (db: Database) => void

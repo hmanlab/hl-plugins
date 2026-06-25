@@ -45,8 +45,8 @@ async function withProjectDb<T>(
 describe("memory_supersede", () => {
   it("links old → new via superseded_by", async () => {
     await withProjectDb("ftmo", async (db) => {
-      memorySave(db, { content: "v1", scope: "project", project_id: "ftmo" })
-      memorySave(db, { content: "v2", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "v1", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "v2", scope: "project", project_id: "ftmo" })
       memorySupersede(db, 1, 2, "project")
       const v1 = memoryGet(db, 1, "project")
       expect(v1?.superseded_by).toBe(2)
@@ -55,8 +55,8 @@ describe("memory_supersede", () => {
 
   it("memory_update on a superseded row returns a clear error", async () => {
     await withProjectDb("ftmo", async (db) => {
-      memorySave(db, { content: "v1", scope: "project", project_id: "ftmo" })
-      memorySave(db, { content: "v2", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "v1", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "v2", scope: "project", project_id: "ftmo" })
       memorySupersede(db, 1, 2, "project")
       expect(() => memoryUpdate(db, 1, "project", { importance: 0.9 })).toThrow(/superseded by 2/)
     })
@@ -66,7 +66,7 @@ describe("memory_supersede", () => {
 describe("memory_promote (pin)", () => {
   it("sets is_pinned = 1", async () => {
     await withProjectDb("ftmo", async (db) => {
-      memorySave(db, { content: "durable rule", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "durable rule", scope: "project", project_id: "ftmo" })
       memoryPromote(db, 1, "project")
       const row = db.prepare("SELECT is_pinned FROM memories WHERE id = 1").get() as { is_pinned: number }
       expect(row.is_pinned).toBe(1)
@@ -77,9 +77,9 @@ describe("memory_promote (pin)", () => {
 describe("memory_archive", () => {
   it("bulk soft-deletes (sets is_archived = 1)", async () => {
     await withProjectDb("ftmo", async (db) => {
-      memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
-      memorySave(db, { content: "b", scope: "project", project_id: "ftmo" })
-      memorySave(db, { content: "c", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "b", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "c", scope: "project", project_id: "ftmo" })
       const n = memoryArchive(db, [1, 3], "project")
       expect(n).toBe(2)
       const archived = db.prepare("SELECT id, is_archived FROM memories ORDER BY id").all() as Array<{
@@ -94,7 +94,7 @@ describe("memory_archive", () => {
 
   it("memory_delete still works on archived rows (hard delete)", async () => {
     await withProjectDb("ftmo", async (db) => {
-      memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
+      await memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
       memoryArchive(db, [1], "project")
       memoryDelete(db, 1, "project")
       expect(memoryGet(db, 1, "project")).toBeNull()
@@ -113,12 +113,12 @@ describe("memory_promote_to_global (cross-DB move)", () => {
       })
       const projectDb = openProjectDb(projectDbPath(projectsDirPath(), "ftmo"))
       try {
-        memorySave(projectDb, {
+        await memorySave(projectDb, {
           content: "global-worthy rule",
           scope: "project",
           project_id: "ftmo",
         })
-        const result = memoryPromoteToGlobal(projectDb, rootDb, 1)
+        const result = await memoryPromoteToGlobal(projectDb, rootDb, 1)
         expect(result.old_id).toBe(1)
         expect(result.scope).toBe("global")
 

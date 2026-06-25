@@ -29,8 +29,8 @@ describe("memoryLink", () => {
     await withTmpHome(async () => {
       const db = await setupProject("ftmo")
       try {
-        memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
-        memorySave(db, { content: "b", scope: "project", project_id: "ftmo" })
+        await memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
+        await memorySave(db, { content: "b", scope: "project", project_id: "ftmo" })
         bootstrapEdges(db, "project")
         const edge = memoryLink({
           db,
@@ -52,8 +52,8 @@ describe("memoryLink", () => {
     await withTmpHome(async () => {
       const db = await setupProject("ftmo")
       try {
-        memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
-        memorySave(db, { content: "b", scope: "project", project_id: "ftmo" })
+        await memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
+        await memorySave(db, { content: "b", scope: "project", project_id: "ftmo" })
         bootstrapEdges(db, "project")
         memoryLink({ db, scope: "project", sourceId: 1, targetId: 2, relation: "supports" })
         expect(() =>
@@ -78,7 +78,7 @@ describe("memoryRelated (BFS)", () => {
       const db = await setupProject("ftmo")
       try {
         for (const c of ["a", "b", "c"]) {
-          memorySave(db, { content: c, scope: "project", project_id: "ftmo" })
+          await memorySave(db, { content: c, scope: "project", project_id: "ftmo" })
         }
         bootstrapEdges(db, "project")
         memoryLink({ db, scope: "project", sourceId: 1, targetId: 2, relation: "supports" })
@@ -98,7 +98,7 @@ describe("memoryRelated (BFS)", () => {
       const db = await setupProject("ftmo")
       try {
         for (const c of ["a", "b", "c"]) {
-          memorySave(db, { content: c, scope: "project", project_id: "ftmo" })
+          await memorySave(db, { content: c, scope: "project", project_id: "ftmo" })
         }
         bootstrapEdges(db, "project")
         memoryLink({ db, scope: "project", sourceId: 1, targetId: 2, relation: "supports" })
@@ -116,8 +116,8 @@ describe("memoryRelated (BFS)", () => {
     await withTmpHome(async () => {
       const db = await setupProject("ftmo")
       try {
-        memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
-        memorySave(db, { content: "b", scope: "project", project_id: "ftmo" })
+        await memorySave(db, { content: "a", scope: "project", project_id: "ftmo" })
+        await memorySave(db, { content: "b", scope: "project", project_id: "ftmo" })
         bootstrapEdges(db, "project")
         memoryLink({ db, scope: "project", sourceId: 1, targetId: 2, relation: "supports" })
         memoryLink({ db, scope: "project", sourceId: 2, targetId: 1, relation: "see_also" })

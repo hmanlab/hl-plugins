@@ -30,18 +30,18 @@ describe("memory_search scope='all'", () => {
     await withTmpHome(async () => {
       const { rootDb, projectDb } = await setup()
       try {
-        memorySave(projectDb, {
+        await memorySave(projectDb, {
           content: "FTMO specific rule about risk",
           category: "rules",
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(rootDb, {
+        await memorySave(rootDb, {
           content: "FTMO global rule about risk",
           category: "rules",
           scope: "global",
         })
-        const result = memorySearch(rootDb, {
+        const result = await memorySearch(rootDb, {
           query: "FTMO risk",
           scope: "all",
           projectDb,
@@ -66,13 +66,13 @@ describe("memory_search scope='all'", () => {
     await withTmpHome(async () => {
       const { rootDb, projectDb } = await setup()
       try {
-        memorySave(projectDb, {
+        await memorySave(projectDb, {
           content: "FTMO project rule",
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(rootDb, { content: "global rule", scope: "global" })
-        const result = memorySearch(rootDb, {
+        await memorySave(rootDb, { content: "global rule", scope: "global" })
+        const result = await memorySearch(rootDb, {
           query: "rule",
           scope: "global",
         })
@@ -90,13 +90,13 @@ describe("memory_search scope='all'", () => {
     await withTmpHome(async () => {
       const { rootDb, projectDb } = await setup()
       try {
-        memorySave(projectDb, {
+        await memorySave(projectDb, {
           content: "FTMO project rule",
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(rootDb, { content: "global rule", scope: "global" })
-        const result = memorySearch(rootDb, {
+        await memorySave(rootDb, { content: "global rule", scope: "global" })
+        const result = await memorySearch(rootDb, {
           query: "rule",
           scope: "project",
           projectDb,
@@ -117,17 +117,17 @@ describe("memory_search scope='all'", () => {
       const { rootDb, projectDb } = await setup()
       try {
         // Global: exact keyword match for "FTMO daily loss limit"
-        memorySave(rootDb, {
+        await memorySave(rootDb, {
           content: "FTMO daily loss limit is 5 percent",
           scope: "global",
         })
         // Project: weak / unrelated content
-        memorySave(projectDb, {
+        await memorySave(projectDb, {
           content: "completely unrelated cooking recipe",
           scope: "project",
           project_id: "ftmo",
         })
-        const result = memorySearch(rootDb, {
+        const result = await memorySearch(rootDb, {
           query: "FTMO daily loss",
           scope: "all",
           projectDb,

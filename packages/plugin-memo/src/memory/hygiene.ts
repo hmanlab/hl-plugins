@@ -219,10 +219,10 @@ export async function buildHygieneReport(args: {
   }
 
   // Conflicts + duplicates need embeddings. Embed each row's content fresh
-  // (cheap; ~0.5ms each).
+  // (~0.5ms each on hash; ~5ms on MiniLM after warmup).
   const embeddings = new Map<number, Float32Array>()
   for (const r of rows) {
-    embeddings.set(r.id, embedder.embed(r.content))
+    embeddings.set(r.id, await embedder.embed(r.content))
   }
 
   // Conflicts: same category + opposite polarity + similarity > 0.85.

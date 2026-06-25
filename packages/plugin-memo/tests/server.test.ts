@@ -49,6 +49,8 @@ const EXPECTED_TOOLS = [
   "memory_hygiene",
   "memory_link",
   "memory_related",
+  "memory_status",
+  "memory_compact_prep",
 ]
 
 interface JsonRpcResponse {

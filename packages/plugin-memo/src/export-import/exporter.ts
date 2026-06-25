@@ -2,8 +2,8 @@
 // a zip at the requested output path (default: ~/hmanlab-exports/<name>-<date>.zip).
 //
 // Round-trip fidelity is preserved by VACUUM INTO (the SQLite-blessed way to
-// snapshot a live DB into a clean file with no WAL). FTS5 indexes + any
-// virtual tables (vec0 if loaded) come along for free — they're inside the DB.
+// snapshot a live DB into a clean file with no WAL). FTS5 indexes come along
+// for free — they're inside the DB.
 
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"

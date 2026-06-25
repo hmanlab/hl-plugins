@@ -26,7 +26,7 @@ async function setupProjectWithMemories(name: string, count: number) {
   rootDb.close()
   const projectDb = openProjectDb(projectDbPath(projectsDirPath(), name))
   for (let i = 0; i < count; i++) {
-    memorySave(projectDb, {
+    await memorySave(projectDb, {
       content: `memory ${i} about topic ${i % 10}`,
       category: i % 2 === 0 ? "rules" : "strategy",
       importance: 0.5,

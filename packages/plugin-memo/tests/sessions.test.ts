@@ -67,12 +67,12 @@ describe("session_start", () => {
       const { rootDb, projectDb, sessions } = await setupActiveProject("ftmo")
       try {
         // Seed a couple of memories so the bundle has content.
-        memorySave(projectDb, {
+        await memorySave(projectDb, {
           content: "FTMO rule",
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(projectDb, {
+        await memorySave(projectDb, {
           content: "Another rule",
           scope: "project",
           project_id: "ftmo",

@@ -2,12 +2,12 @@
 //
 // Embedding happens before the row insert; we store both the original content
 // (TEXT) and the embedding (BLOB) on the row. FTS5 sync is handled by triggers
-// declared in src/project/schema.ts and src/db.ts. vec0 sync is best-effort —
-// if the extension isn't loaded, the search module falls back to FTS-only.
+// declared in src/project/schema.ts and src/db.ts. Vector search reads the
+// embedding BLOB at query time (JS-side cosine in src/memory/search.ts) —
+// there is no separate vec0 index.
 
 import type { Database } from "bun:sqlite"
-import { getEmbedder, upsertVector, deleteVector, float32ToBlob } from "../embedder.js"
-import { vectorIndexAvailable } from "../project/schema.js"
+import { getEmbedder, float32ToBlob } from "../embedder.js"
 
 export type Scope = "project" | "global"
 
@@ -51,10 +51,6 @@ function tableFor(scope: Scope): "memories" | "global_memories" {
   return scope === "project" ? "memories" : "global_memories"
 }
 
-function vecTableFor(scope: Scope): "memory_vectors" | "global_memory_vectors" {
-  return scope === "project" ? "memory_vectors" : "global_memory_vectors"
-}
-
 function rowFromRecord(r: Record<string, unknown>): MemoryRow {
   return {
     id: r["id"] as number,
@@ -72,17 +68,21 @@ function rowFromRecord(r: Record<string, unknown>): MemoryRow {
     superseded_by: (r["superseded_by"] as number | null) ?? null,
     created_at: r["created_at"] as number,
     updated_at: r["updated_at"] as number,
+    // Embedding BLOB is optional in the MemoryRow type, but always present on
+    // rows written by memorySave. Search reads it for JS-side cosine.
+    embedding: r["embedding"] as ArrayBuffer | Uint8Array | null | undefined,
   }
 }
 
 /**
- * Save a memory. Embeds the content, inserts the row, and best-effort writes
- * to the vec0 table if available. FTS5 sync is automatic via triggers.
+ * Save a memory. Embeds the content, inserts the row (with the embedding BLOB),
+ * and lets FTS5 triggers keep the FTS mirror in sync. Vector search reads the
+ * BLOB at query time. Async because the real embedder (MiniLM) is async.
  */
-export function memorySave(db: Database, args: SaveArgs): SaveResult {
+export async function memorySave(db: Database, args: SaveArgs): Promise<SaveResult> {
   const t0 = performance.now()
   const embedder = getEmbedder()
-  const v = embedder.embed(args.content)
+  const v = await embedder.embed(args.content)
   const embedMs = performance.now() - t0
 
   const now = Date.now()
@@ -108,10 +108,6 @@ export function memorySave(db: Database, args: SaveArgs): SaveResult {
       now,
       float32ToBlob(v),
     ) as { id: number }
-
-    if (vectorIndexAvailable(db)) {
-      upsertVector(db, "memory_vectors", result.id, v)
-    }
 
     const saveMs = performance.now() - t0
     return {
@@ -143,14 +139,6 @@ export function memorySave(db: Database, args: SaveArgs): SaveResult {
     now,
     float32ToBlob(v),
   ) as { id: number }
-
-  if (vectorIndexAvailable(db)) {
-    upsertVector(db, "memory_vectors", result.id, v)
-  }
-
-  if (vectorIndexAvailable(db)) {
-    upsertVector(db, "memory_vectors", result.id, v)
-  }
 
   const saveMs = performance.now() - t0
   return {
@@ -200,10 +188,16 @@ export type UpdateResult = {
   update_ms: number
 }
 
-/** Patch a memory. Re-embeds + reindexes vec0 if content changes.
+/** Patch a memory. Re-embeds and rewrites the embedding BLOB if content changes.
  *  Refuses to update a row that's been superseded (PRD §20 Q4: superseded
- *  memories are read-only — point the caller at the canonical successor). */
-export function memoryUpdate(db: Database, id: number, scope: Scope, patch: UpdatePatch): UpdateResult {
+ *  memories are read-only — point the caller at the canonical successor).
+ *  Async because the real embedder is async. */
+export async function memoryUpdate(
+  db: Database,
+  id: number,
+  scope: Scope,
+  patch: UpdatePatch,
+): Promise<UpdateResult> {
   const table = tableFor(scope)
   const existing = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id) as
     | Record<string, unknown>
@@ -226,11 +220,8 @@ export function memoryUpdate(db: Database, id: number, scope: Scope, patch: Upda
 
   let reembedded = false
   if (patch.content !== undefined && patch.content !== existing["content"]) {
-    const v = getEmbedder().embed(patch.content)
+    const v = await getEmbedder().embed(patch.content)
     reembedded = true
-    if (vectorIndexAvailable(db)) {
-      upsertVector(db, vecTableFor(scope), id, v)
-    }
     db.prepare(
       `UPDATE ${table}
          SET content = ?, category = ?, channel = ?, importance = ?,
@@ -254,15 +245,12 @@ export function memoryUpdate(db: Database, id: number, scope: Scope, patch: Upda
   }
 }
 
-/** Hard delete. Triggers clean up FTS5; vec0 is best-effort. */
+/** Hard delete. Triggers clean up FTS5. */
 export function memoryDelete(db: Database, id: number, scope: Scope): void {
   const table = tableFor(scope)
   const existing = db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(id)
   if (!existing) throw new Error(`Memory ${id} not found in ${scope}`)
   db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id)
-  if (vectorIndexAvailable(db)) {
-    deleteVector(db, vecTableFor(scope), id)
-  }
 }
 
 // ─── Phase 05 lifecycle ─────────────────────────────────────────────────
@@ -360,9 +348,6 @@ export function memoryPromoteToGlobal(
 
   // Delete from project DB.
   projectDb.prepare(`DELETE FROM memories WHERE id = ?`).run(id)
-  if (vectorIndexAvailable(projectDb)) {
-    deleteVector(projectDb, "memory_vectors", id)
-  }
 
   return { old_id: id, new_global_id: insertResult.id, scope: "global" }
 }

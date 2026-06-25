@@ -29,7 +29,7 @@ describe("memory_hygiene report shape", () => {
       })
       const db = openProjectDb(projectDbPath(projectsDirPath(), "ftmo"))
       try {
-        memorySave(db, {
+        await memorySave(db, {
           content: "FTMO rule about risk",
           scope: "project",
           project_id: "ftmo",
@@ -156,12 +156,12 @@ describe("memory_hygiene — scope='all'", () => {
       })
       const db = openProjectDb(projectDbPath(projectsDirPath(), "ftmo"))
       try {
-        memorySave(db, {
+        await memorySave(db, {
           content: "FTMO project rule",
           scope: "project",
           project_id: "ftmo",
         })
-        memorySave(rootDb, {
+        await memorySave(rootDb, {
           content: "Global preference",
           scope: "global",
         })

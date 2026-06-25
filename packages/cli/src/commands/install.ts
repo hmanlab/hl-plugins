@@ -63,6 +63,105 @@ async function ensureRequirement(req: PluginRequirement): Promise<string> {
   return "installed"
 }
 
+/**
+ * Resolve the absolute path to the plugin's copied CLI bundle, or null if
+ * the plugin didn't declare one. Used to invoke preInstall/disableCommand
+ * without relying on PATH.
+ */
+function cliBundlePath(plugin: PluginManifest): string | null {
+  if (!plugin.contract.cli) return null
+  return join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.cli))
+}
+
+/**
+ * Run a plugin subcommand via the copied CLI bundle. `subcommand` is the
+ * rest of the argv (e.g. "embedder install"). Returns the run result; the
+ * caller decides whether to fail the install.
+ */
+async function runPluginCli(plugin: PluginManifest, subcommand: string): Promise<{ code: number; stdout: string; stderr: string }> {
+  const bundle = cliBundlePath(plugin)
+  if (!bundle || !existsSync(bundle)) {
+    throw new Error(
+      `Plugin "${plugin.name}" declares an embedder but no copied CLI bundle was found at ` +
+        `${bundle ?? "<missing>"}. The install is incomplete — re-run \`hl-plugins install ${plugin.name}\`.`,
+    )
+  }
+  return run(`bun ${JSON.stringify(bundle)} ${subcommand}`, { throwOnError: false })
+}
+
+/**
+ * Prompt the user about an optional embedder (local model) the plugin wants
+ * to use, then *persist the answer immediately* — there's no "run later."
+ *
+ *   Yes → run `bun <copied-cli> <preInstall>`. Sets embedder_mode=minilm.
+ *          The model downloads on the very next memory call (~2s warmup).
+ *   No  → run `bun <copied-cli> <disableCommand>`. Sets embedder_mode=hash.
+ *          The model is never downloaded — `loadExtractor()` short-circuits
+ *          because of the config flag.
+ *
+ * Non-TTY installs (CI, piped scripts) treat it as Yes — the install never
+ * blocks waiting for user input.
+ */
+async function promptEmbedder(plugin: PluginManifest): Promise<string> {
+  const emb = plugin.contract.embedder
+  if (!emb) return "no embedder declared"
+  const nonInteractive = !process.stdin.isTTY
+  if (!nonInteractive) {
+    const lines: string[] = []
+    lines.push(`${ui.bold(emb.name)} (~${emb.sizeMb} MB) ${emb.purpose}.`)
+    if (emb.tradeoff) {
+      const t = emb.tradeoff
+      lines.push("")
+      lines.push(`  ${ui.green("With it:")}    ${t.with}`)
+      lines.push(`  ${ui.yellow("Without it:")} ${t.without}`)
+      if (t.note) lines.push(`  ${ui.dim(`(${t.note})`)}`)
+    }
+    lines.push("")
+    const answer = await ui.promptYesNo("Enable?", true)
+    if (!answer) {
+      // User declined. Persist immediately via the disable subcommand.
+      if (!emb.disableCommand || emb.disableCommand.length === 0) {
+        throw new Error(
+          `Plugin "${plugin.name}" declares an embedder but no disableCommand. ` +
+            `Cannot persist "no" answer — refusing to install in an inconsistent state.`,
+        )
+      }
+      for (const cmd of emb.disableCommand) {
+        const res = await runPluginCli(plugin, cmd)
+        if (res.code !== 0) {
+          throw new Error(
+            `Failed to persist "no" answer for ${plugin.name}'s embedder:\n` +
+              `  command: bun <cli> ${cmd}\n` +
+              `  ${(res.stderr || res.stdout).trim() || "(no output)"}`,
+          )
+        }
+      }
+      return `declined (embedder_mode=hash; ${emb.name} will never download)`
+    }
+    // User accepted. Persist.
+  }
+
+  // Yes path: persist embedder_mode=minilm.
+  if (!emb.preInstall || emb.preInstall.length === 0) {
+    throw new Error(
+      `Plugin "${plugin.name}" declares an embedder but no preInstall commands. ` +
+        `Cannot persist "yes" answer — refusing to install in an inconsistent state.`,
+    )
+  }
+  for (const cmd of emb.preInstall) {
+    const res = await runPluginCli(plugin, cmd)
+    if (res.code !== 0) {
+      const tail = (res.stderr || res.stdout).trim() || "(no output)"
+      throw new Error(
+        `Failed to persist "yes" answer for ${plugin.name}'s embedder:\n` +
+          `  command: bun <cli> ${cmd}\n` +
+          `  ${tail}`,
+      )
+    }
+  }
+  return `accepted (embedder_mode=minilm; ${emb.name} will download on first memory call)`
+}
+
 async function authenticate(plugin: PluginManifest, opts: InstallOpts): Promise<string> {
   const auth = plugin.contract.auth
   if (!auth) return "no auth required"
@@ -152,6 +251,19 @@ async function copyPluginFiles(plugin: PluginManifest): Promise<string[]> {
     // survives the source package being moved/renamed, and Claude Code
     // launches the same path on every machine.
     const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    mkdirSync(dirname(dest), { recursive: true })
+    copyFileSync(src, dest)
+    copied.push(tilde(dest))
+  }
+  if (plugin.contract.cli) {
+    // Ship the CLI bundle alongside the MCP bundle so install-time prompts
+    // (e.g. embedder install/disable) can invoke plugin subcommands by
+    // absolute path without depending on PATH or a global install.
+    const src = join(plugin.packageDir, plugin.contract.cli)
+    if (!existsSync(src)) {
+      throw new Error(`Plugin CLI bundle missing: ${src}\n` + `Run \`bun run build\` inside the plugin package first.`)
+    }
+    const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.cli))
     mkdirSync(dirname(dest), { recursive: true })
     copyFileSync(src, dest)
     copied.push(tilde(dest))
@@ -255,6 +367,20 @@ async function installOne(
     if (note) ui.info(`    ${ui.dim(note)}`)
   }
 
+  // If the plugin declares an embedder, the CLI bundle must be on disk
+  // BEFORE we ask the user — the prompt invokes plugin subcommands via the
+  // copied bundle. Copy just the CLI bundle here; the rest of the files
+  // (MCP bundle, skill) come in the normal "Copy files" step below.
+  if (plugin.contract.embedder && plugin.contract.cli) {
+    await ui.spinner("Stage plugin CLI for embedder prompt", () => copyCliBundle(plugin))
+  }
+
+  if (plugin.contract.embedder) {
+    ui.info("")
+    const note = await promptEmbedder(plugin)
+    if (note) ui.info(`    ${ui.dim("→")} ${ui.dim(note)}`)
+  }
+
   const auth = plugin.contract.auth
   if (auth) {
     const note = await ui.spinner(`Authenticate: ${auth.keyLabel}`, () => authenticate(plugin, opts))
@@ -271,6 +397,19 @@ async function installOne(
     const verified = await ui.spinner("Verify", () => verify(plugin))
     for (const v of verified) ui.info(`    ${ui.dim("•")} ${v}`)
   }
+}
+
+/** Copy only the plugin's CLI bundle (not the MCP bundle or skill).
+ *  Called early so embedder prompts can invoke plugin subcommands. */
+async function copyCliBundle(plugin: PluginManifest): Promise<void> {
+  if (!plugin.contract.cli) return
+  const src = join(plugin.packageDir, plugin.contract.cli)
+  if (!existsSync(src)) {
+    throw new Error(`Plugin CLI bundle missing: ${src}\n` + `Run \`bun run build\` inside the plugin package first.`)
+  }
+  const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.cli))
+  mkdirSync(dirname(dest), { recursive: true })
+  copyFileSync(src, dest)
 }
 
 function parseArgs(args: string[]): InstallOpts & { names: string[] } {

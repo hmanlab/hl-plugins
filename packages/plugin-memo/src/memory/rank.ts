@@ -28,14 +28,25 @@ export type RankedCandidate = {
 
 /**
  * Fuse multiple rank lists into a single score map.
- *   score(d) = Σ_i  1/(k_const + rank_i)
+ *   score(d) = Σ_i  w_i · 1/(k_const + rank_i)
+ *
+ * When `weights` is omitted, all lists contribute equally. Pass a per-list
+ * weight to favor one signal over another (e.g. boost vector over recency
+ * when the corpus is small enough that recency covers everything).
  */
-export function rrfFusion(lists: RankedCandidate[][]): Map<number | string, number> {
+export function rrfFusion(
+  lists: RankedCandidate[][],
+  weights?: number[],
+): Map<number | string, number> {
   const scores = new Map<number | string, number>()
-  for (const list of lists) {
-    list.forEach((c, i) => {
-      const rank = i + 1
-      const delta = 1 / (RRF_K + rank)
+  const w = weights ?? lists.map(() => 1)
+  for (let i = 0; i < lists.length; i++) {
+    const wi = w[i] ?? 1
+    const list = lists[i]
+    if (!list) continue
+    list.forEach((c, idx) => {
+      const rank = idx + 1
+      const delta = wi / (RRF_K + rank)
       scores.set(c.id, (scores.get(c.id) ?? 0) + delta)
     })
   }

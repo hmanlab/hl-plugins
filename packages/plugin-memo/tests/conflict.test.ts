@@ -4,7 +4,7 @@
 import { describe, it, expect } from "bun:test"
 import { detectConflict } from "../src/conflict/detector.ts"
 import { oppositePolarity, polarityOf } from "../src/conflict/sentiment.ts"
-import { embed } from "../src/embedder.ts"
+import { embedHash } from "../src/embedder.ts"
 
 describe("polarity heuristic", () => {
   it("detects positive polarity", () => {
@@ -102,7 +102,7 @@ describe("detectConflict — 20-pair smoke set", () => {
           created_at: 1,
           // embed() returns Float32Array; the detector accepts it via
           // embeddingFromBuf's TypedArray branch.
-          embedding: embed(p.a).buffer,
+          embedding: embedHash(p.a).buffer,
         },
       ]
       // Hash-based embeddings cluster by shared shingles, not by negation.
@@ -116,7 +116,7 @@ describe("detectConflict — 20-pair smoke set", () => {
         {
           content: p.b,
           category: p.category,
-          embedding: embed(p.b),
+          embedding: embedHash(p.b),
         },
         0.4,
       )
@@ -145,7 +145,7 @@ describe("conflict + force bypass", () => {
         category: "rules",
         importance: 0.8,
         created_at: 1,
-        embedding: embed("Always use 1% risk per trade").buffer,
+        embedding: embedHash("Always use 1% risk per trade").buffer,
       },
     ]
     const result = detectConflict(
@@ -153,7 +153,7 @@ describe("conflict + force bypass", () => {
       {
         content: "Never use 1% risk per trade",
         category: "rules",
-        embedding: embed("Never use 1% risk per trade"),
+        embedding: embedHash("Never use 1% risk per trade"),
       },
       0.4,
     )

@@ -81,7 +81,7 @@ async function main(): Promise<void> {
 
   const sessions = new SessionManager(db, switcher, () => projectsDirPath())
 
-  const server = new McpServer({ name: "hmanlab-memo", version: "0.4.5" })
+  const server = new McpServer({ name: "hmanlab-memo", version: "0.5.1" })
   registerPersonaTools(server, db, () => personasDirPath())
   registerProjectTools(server, db, switcher, () => projectsDirPath(), sessions)
   registerMemoryTools(server, db, switcher, () => projectsDirPath())

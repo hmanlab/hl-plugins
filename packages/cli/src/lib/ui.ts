@@ -108,4 +108,24 @@ export const ui = {
       rl.close()
     }
   },
+
+  /**
+   * Yes/No prompt. Accepts y/yes/n/no (case-insensitive). Returns the
+   * `defaultYes` value when the input is empty or the stream closes.
+   * Throws on non-TTY so callers can decide to skip the prompt instead.
+   */
+  async promptYesNo(question: string, defaultYes: boolean): Promise<boolean> {
+    if (!stdin.isTTY) {
+      throw new Error("Cannot prompt yes/no: stdin is not a TTY.")
+    }
+    const rl = createInterface({ input: stdin, output: stdout, terminal: true })
+    const hint = defaultYes ? "[Y/n]" : "[y/N]"
+    try {
+      const answer = (await rl.question(`${question} ${hint}: `)).trim().toLowerCase()
+      if (answer === "") return defaultYes
+      return answer === "y" || answer === "yes"
+    } finally {
+      rl.close()
+    }
+  },
 }

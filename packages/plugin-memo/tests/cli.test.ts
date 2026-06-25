@@ -79,7 +79,7 @@ describe("CLI primitives — export/import round-trip via CLI primitives", () =>
         const { projectDbPath } = await import("../src/project/registry.js")
         const db = openProjectDb(projectDbPath(projectsDirPath(), "cli-test"))
         for (let i = 0; i < 50; i++) {
-          memorySave(db, {
+          await memorySave(db, {
             content: `mem ${i}`,
             scope: "project",
             project_id: "cli-test",

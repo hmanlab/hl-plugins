@@ -12,7 +12,7 @@ account, no telemetry.
 
 ## What's in the box (v1.0.0)
 
-### MCP tools (33)
+### MCP tools (35)
 - **Persona (11):** `persona_list`, `persona_get`, `persona_create`,
   `persona_update`, `persona_delete`, `persona_clone`,
   `persona_reload`, `user_persona_get`, `user_persona_update`
@@ -50,6 +50,46 @@ The CLI auto-installs Bun if missing and registers the MCP bundle
 under `~/.local/share/hl-plugins/memo/`, then wires it into
 `~/.claude.json`.
 
+### Optional: the MiniLM embedder
+
+`hl-plugins install memo` prompts once before completing the install:
+
+```
+? MiniLM-L6-v2 (~25 MB) powers semantic search so paraphrase and typo queries
+  still hit the right memory.
+
+  With it:    73.3% recall@5
+  Without it: paraphrase queries drop to ~30%
+              (30-seed eval across coding, glossary, and preferences)
+
+Enable? [Y/n]:
+```
+
+- **Y (default):** the install writes `embedder_mode: minilm` to
+  `~/.hmanlab/config.yaml`. The model downloads lazily on the next
+  `memory_save` / `memory_search` call (~25 MB, ~2 s warmup, then ~50 ms
+  per query). The choice is committed — there's no "did it really install?"
+  follow-up.
+- **n:** the install writes `embedder_mode: hash` and `loadExtractor()`
+  short-circuits on every subsequent call. The model is **never** downloaded
+  or referenced.
+- **Non-interactive installs** (CI, scripts piped via `| sh`): the prompt is
+  skipped and treated as Yes. Run `hmanlab-memory embedder disable`
+  afterwards if you want to flip it without re-installing.
+
+Change your mind any time:
+
+```bash
+hmanlab-memory embedder status     # show current mode
+hmanlab-memory embedder install    # switch to minilm (lazy download on next memory call)
+hmanlab-memory embedder disable    # switch to hash (no download, ever)
+```
+
+The mode is stored under `embedder_mode` in `~/.hmanlab/config.yaml`. Three
+values: `minilm` (require the real model), `hash` (use the deterministic
+trigram fallback), `auto` (try MiniLM, fall back to hash on failure —
+default if the key is absent).
+
 ## CLI quickstart
 
 ```bash
@@ -70,9 +110,11 @@ Full CLI reference: [`docs/USAGE.md`](./docs/USAGE.md).
 
 ```
 ~/.hmanlab/
-├── config.yaml          # cwd_auto_detect, persona_filter_mode, decay knobs
+├── config.yaml          # cwd_auto_detect, persona_filter_mode, embedder_mode
 ├── root.db              # user_persona, ai_personas, projects,
 │                        # global_memories (+ _fts + _edges), schema migrations
+├── models/              # MiniLM-L6-v2 q8 (~25 MB), lazy-downloaded on first use
+│   └── Xenova/all-MiniLM-L6-v2/...
 ├── personas/            # persona YAML files (built-in + user)
 │   ├── default.yaml
 │   ├── work.yaml        # parent: default

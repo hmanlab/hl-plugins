@@ -56,6 +56,13 @@ export type MemoConfig = {
   persona_filter_mode?: "inclusive" | "strict"
   embedding_model: string
   embedding_dim: number
+  /**
+   * Which embedder to use. "auto" tries MiniLM and silently falls back to
+   * hash on failure; "minilm" requires the model; "hash" skips the download
+   * entirely and uses the deterministic trigram embedder. Set to "hash" by
+   * `hl-plugins install memo` when the user declines the embedder prompt.
+   */
+  embedder_mode?: "auto" | "minilm" | "hash"
 }
 
 export const DEFAULT_CONFIG: MemoConfig = {
@@ -68,6 +75,7 @@ export const DEFAULT_CONFIG: MemoConfig = {
   persona_filter_mode: "inclusive",
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2",
   embedding_dim: 384,
+  embedder_mode: "auto",
 }
 
 /**

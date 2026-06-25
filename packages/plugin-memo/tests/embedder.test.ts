@@ -2,45 +2,45 @@
 // gives similar texts higher cosine similarity than dissimilar ones.
 
 import { describe, it, expect } from "bun:test"
-import { cosineSimilarity, embed, EMBEDDING_DIM, float32ToBlob } from "../src/embedder.ts"
+import { cosineSimilarity, embedHash, EMBEDDING_DIM, float32ToBlob } from "../src/embedder.ts"
 
-describe("embed()", () => {
+describe("embedHash()", () => {
   it("returns 384-dim vectors", () => {
-    const v = embed("hello world")
+    const v = embedHash("hello world")
     expect(v.length).toBe(EMBEDDING_DIM)
     expect(v.length).toBe(384)
   })
 
   it("is deterministic — same text → same vector", () => {
-    const a = embed("FTMO daily loss limit is 5%")
-    const b = embed("FTMO daily loss limit is 5%")
+    const a = embedHash("FTMO daily loss limit is 5%")
+    const b = embedHash("FTMO daily loss limit is 5%")
     expect(cosineSimilarity(a, b)).toBeCloseTo(1, 5)
   })
 
   it("is case + punctuation insensitive", () => {
-    const a = embed("FTMO Daily Loss!")
-    const b = embed("ftmo daily loss")
+    const a = embedHash("FTMO Daily Loss!")
+    const b = embedHash("ftmo daily loss")
     expect(cosineSimilarity(a, b)).toBeGreaterThan(0.9)
   })
 
   it("similar texts score higher than dissimilar ones", () => {
-    const a = embed("FTMO daily loss limit is 5 percent of account")
-    const similar = embed("prop firm daily loss is five percent")
-    const dissimilar = embed("London weather forecast tomorrow")
+    const a = embedHash("FTMO daily loss limit is 5 percent of account")
+    const similar = embedHash("prop firm daily loss is five percent")
+    const dissimilar = embedHash("London weather forecast tomorrow")
     const simSimilar = cosineSimilarity(a, similar)
     const simDissimilar = cosineSimilarity(a, dissimilar)
     expect(simSimilar).toBeGreaterThan(simDissimilar)
   })
 
   it("empty string → zero vector", () => {
-    const v = embed("")
+    const v = embedHash("")
     let norm = 0
     for (let i = 0; i < v.length; i++) norm += v[i]! * v[i]!
     expect(norm).toBe(0)
   })
 
   it("unit-norm (L2 norm ≈ 1)", () => {
-    const v = embed("a typical sentence about markets")
+    const v = embedHash("a typical sentence about markets")
     let norm = 0
     for (let i = 0; i < v.length; i++) norm += v[i]! * v[i]!
     expect(Math.sqrt(norm)).toBeCloseTo(1, 5)
@@ -49,7 +49,7 @@ describe("embed()", () => {
 
 describe("float32ToBlob()", () => {
   it("round-trips through Uint8Array", () => {
-    const v = embed("hello")
+    const v = embedHash("hello")
     const blob = float32ToBlob(v)
     expect(blob).toBeInstanceOf(Uint8Array)
     expect(blob.byteLength).toBe(v.byteLength)

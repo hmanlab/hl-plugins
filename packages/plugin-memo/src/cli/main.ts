@@ -121,7 +121,7 @@ const program = new Command()
 program
   .name("hmanlab-memory")
   .description("Local-first MCP memory server with personas, projects, decay, and conflict detection.")
-  .version("0.5.0")
+  .version("0.5.1")
 
 // init
 program
@@ -431,7 +431,7 @@ memoryCmd
       const { projectDbPath } = await import("../project/registry.js")
       const db = openProjectDb(projectDbPath(projectsDirPath(), cfg.active_project))
       try {
-        const result = memorySave(db, {
+        const result = await memorySave(db, {
           content,
           category: opts.category ?? null,
           importance,
@@ -445,7 +445,7 @@ memoryCmd
     } else {
       const db = openRootDb()
       try {
-        const result = memorySave(db, {
+        const result = await memorySave(db, {
           content,
           category: opts.category ?? null,
           importance,
@@ -481,7 +481,7 @@ program
       const active = cfg.active_project ?? "(none)"
       const personas = listAiPersonas(db)
       const projects = projectList(db)
-      console.log(`hmanlab-memory v0.5.0`)
+      console.log(`hmanlab-memory v0.5.1`)
       console.log(`  Root DB:    ${hmanlabHome()}/root.db`)
       console.log(
         `  Personas:   ${personas.length} (${personas.filter((p) => p.is_builtin).length} built-in)`,
@@ -490,9 +490,49 @@ program
       console.log(`  Active:     ${active}`)
       console.log(`  cwd_auto:   ${cfg.cwd_auto_detect ? "enabled" : "disabled"}`)
       console.log(`  Persona filter: ${cfg.persona_filter_mode ?? "inclusive"}`)
+      console.log(`  Embedder mode: ${cfg.embedder_mode ?? "auto"} (model: ${cfg.embedding_model})`)
     } finally {
       db.close()
     }
+  })
+
+// embedder — toggle the optional MiniLM model on/off.
+//
+// `install` writes `embedder_mode: minilm`. The actual model download
+// happens lazily on the first MCP-server `memory_save`/`memory_search`
+// call (~25 MB, ~2 s warmup, then ~50 ms/query). We can't reliably force
+// an eager download here: shipping the native onnxruntime-node binary
+// (~210 MB) with the install is impractical, and the bundled CLI doesn't
+// have a path to trigger loading from its copied location.
+//
+// What `hl-plugins install memo` is doing is asking the user to commit at
+// install time. After Yes, the choice is locked in via the config flag —
+// the very next memory call will download. After No, the flag is "hash"
+// and the embedder short-circuits without ever touching the model.
+const embedderCmd = program.command("embedder").description("Manage the optional MiniLM embedder.")
+embedderCmd
+  .command("install")
+  .description("Enable MiniLM. Persists embedder_mode=minilm; model downloads on first memory call.")
+  .action(() => {
+    ensureHome()
+    writeConfig({ embedder_mode: "minilm" })
+    console.log("✓ embedder_mode set to minilm. MiniLM will download on first memory call (~2s warmup).")
+  })
+embedderCmd
+  .command("disable")
+  .description("Use the hash fallback. Skips the model download entirely.")
+  .action(() => {
+    ensureHome()
+    writeConfig({ embedder_mode: "hash" })
+    console.log("✓ Embedder set to hash fallback. MiniLM will never download.")
+  })
+embedderCmd
+  .command("status")
+  .description("Show which embedder mode is active.")
+  .action(() => {
+    const cfg = readConfig()
+    console.log(`embedder_mode: ${cfg.embedder_mode ?? "auto"}`)
+    console.log(`embedding_model: ${cfg.embedding_model}`)
   })
 
 // config
@@ -553,4 +593,10 @@ mcpCmd
 export function run(argv: string[]): void {
   program.parse(argv)
   // commander handles argv; if no subcommand matches, help is printed.
+}
+
+// Auto-run when invoked directly (e.g. `bun dist/cli.js embedder install`).
+// Skip when imported as a library (e.g. by tests or the bin shim).
+if (import.meta.main) {
+  run(process.argv)
 }
