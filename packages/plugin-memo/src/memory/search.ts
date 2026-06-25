@@ -38,10 +38,10 @@ export type CrossDbScope = "all" | "global" | "project"
 
 const TOP_K = 20
 
-function tableFor(scope: Scope): { row: string; fts: string } {
+function tableFor(scope: Scope): { row: string; fts: string; ftsTrgm: string } {
   return scope === "project"
-    ? { row: "memories", fts: "memories_fts" }
-    : { row: "global_memories", fts: "global_memories_fts" }
+    ? { row: "memories", fts: "memories_fts", ftsTrgm: "memories_fts_trgm" }
+    : { row: "global_memories", fts: "global_memories_fts", ftsTrgm: "global_memories_fts_trgm" }
 }
 
 /** Strip FTS5 special chars from a user query and quote each token. */
@@ -169,6 +169,7 @@ export async function memorySearch(
 
   const allCandidates: Array<MemoryRow & { source_db: string }> = []
   const allFtsLists: RankedCandidate[] = []
+  const allTrgmLists: RankedCandidate[] = []
   const allRecencyLists: RankedCandidate[] = []
   const allVectorLists: RankedCandidate[] = []
 
@@ -199,6 +200,56 @@ export async function memorySearch(
         allVectorLists.push({ id: taggedId(target.source, s.id), rank: i + 1 })
       })
     }
+    // Trigram FTS: 3-char sliding window. Catches typo / partial-token
+    // matches that the word-level FTS misses. FTS5's trigram tokenizer
+    // requires single 3+ char tokens per MATCH, so we walk each 3-char
+    // window of the query and OR-merge the row sets. Trigram has higher
+    // false-positive rate than word-level FTS (any 3-char substring
+    // matches), so we weight it lower when RRF-fusing.
+    if (ftsQ.length > 0) {
+      const { ftsTrgm, row } = tableFor(target.scope)
+      try {
+        // Build a "trigrams OR'd" MATCH expression: each 3-char window of
+        // the original query becomes one OR'd clause. FTS5 trigram treats
+        // each as a separate candidate token.
+        const cleaned = ftsQ.replace(/[^a-zA-Z0-9 _\-]/g, " ")
+        const trigrams: string[] = []
+        for (let i = 0; i + 3 <= cleaned.length; i++) {
+          const tg = cleaned.slice(i, i + 3).trim()
+          if (tg.length === 3) trigrams.push(tg)
+        }
+        if (trigrams.length > 0) {
+          const matchExpr = trigrams.map((t) => `"${t.replace(/"/g, '""')}"`).join(" OR ")
+          const trgmRows = target.db
+            .prepare(
+              `SELECT m.id AS id, f.rank AS rnk FROM ${ftsTrgm} f
+               JOIN ${row} m ON m.id = f.rowid
+              WHERE ${ftsTrgm} MATCH ?
+                AND m.is_archived = 0 AND m.is_expired = 0 AND m.is_cold = 0
+              ORDER BY rnk
+              LIMIT ?`,
+            )
+            .all(matchExpr, TOP_K) as Array<{ id: number; rnk: number }>
+          trgmRows.forEach((r, i) => {
+            allTrgmLists.push({ id: taggedId(target.source, r.id), rank: i + 1 })
+            // Also add to candidate set so other branches (vector, recency)
+            // can pick it up if they find a stronger match.
+            if (!allCandidates.some((c) => c.id === r.id && c.source_db === target.source)) {
+              const rowData = target.db
+                .prepare(`SELECT * FROM ${row} WHERE id = ?`)
+                .get(r.id) as Record<string, unknown> | undefined
+              if (rowData) allCandidates.push({ ...rowFromRecord(rowData), source_db: target.source })
+            }
+          })
+        }
+      } catch (err) {
+        // Trigram MATCH can throw on pathological queries (FTS5 syntax
+        // chars). Fall back to skipping trigram signal for this query.
+        process.stderr.write(
+          `[hmanlab-memo] trigram query failed (${(err as Error).message.split("\n")[0]}); skipping\n`,
+        )
+      }
+    }
   }
 
   // RRF tag-aware fusion. Map tagged id → MemoryRow.
@@ -207,10 +258,16 @@ export async function memorySearch(
     taggedRowMap.set(taggedId(c.source_db, c.id), c)
   }
 
-  // Weighted RRF: vector (semantic) gets 2×, FTS (literal) gets 1×, recency
-  // gets 0.5×. On small corpora recency covers most memories and drowns out
-  // the vector signal; down-weighting it lets the cosine ordering win.
-  let fused = rrfFusion([allFtsLists, allRecencyLists, allVectorLists], [1.0, 0.5, 2.0])
+  // Weighted RRF. Vector (semantic) gets 2×, FTS (literal) gets 1×, trigram
+  // (fuzzy substring) gets 0.5×, recency gets 0.5×. On small corpora recency
+  // covers most memories and drowns out the vector signal; down-weighting it
+  // lets the cosine ordering win. Trigram is down-weighted because it has
+  // higher false-positive rate than word-level FTS (any 3-char substring
+  // matches).
+  let fused = rrfFusion(
+    [allFtsLists, allTrgmLists, allRecencyLists, allVectorLists],
+    [1.0, 0.5, 0.5, 2.0],
+  )
   fused = applyDecayPlaceholder(
     fused,
     new Map(

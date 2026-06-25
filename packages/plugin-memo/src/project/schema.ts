@@ -36,10 +36,21 @@ CREATE INDEX IF NOT EXISTS idx_memories_persona     ON memories(persona_id);
 CREATE INDEX IF NOT EXISTS idx_memories_project     ON memories(project_id);
 CREATE INDEX IF NOT EXISTS idx_memories_superseded  ON memories(superseded_by);
 
+-- Word-level FTS5 (exact tokens): for literal queries like "tabs for indentation".
 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
   content, category, channel,
   content='memories', content_rowid='id',
   tokenize="unicode61 remove_diacritics 2 tokenchars '_-'"
+);
+
+-- Trigram FTS5 (3-char sliding window): for typo / fuzzy matches where the
+-- query shares substrings but not whole tokens with the stored memory.
+-- Searched in parallel with memories_fts; results are RRF-fused in
+-- memorySearch. Adds ~30% index size but lifts recall on paraphrase / typo.
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts_trgm USING fts5(
+  content,
+  content='memories', content_rowid='id',
+  tokenize="trigram"
 );
 
 CREATE TABLE IF NOT EXISTS project_sessions (
@@ -56,18 +67,26 @@ CREATE INDEX IF NOT EXISTS idx_sessions_started ON project_sessions(started_at);
 CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
   INSERT INTO memories_fts(rowid, content, category, channel)
     VALUES (new.id, new.content, new.category, new.channel);
+  INSERT INTO memories_fts_trgm(rowid, content)
+    VALUES (new.id, new.content);
 END;
 
 CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
   INSERT INTO memories_fts(memories_fts, rowid, content, category, channel)
     VALUES ('delete', old.id, old.content, old.category, old.channel);
+  INSERT INTO memories_fts_trgm(memories_fts_trgm, rowid, content)
+    VALUES ('delete', old.id, old.content);
 END;
 
 CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
   INSERT INTO memories_fts(memories_fts, rowid, content, category, channel)
     VALUES ('delete', old.id, old.content, old.category, old.channel);
+  INSERT INTO memories_fts_trgm(memories_fts_trgm, rowid, content)
+    VALUES ('delete', old.id, old.content);
   INSERT INTO memories_fts(rowid, content, category, channel)
     VALUES (new.id, new.content, new.category, new.channel);
+  INSERT INTO memories_fts_trgm(rowid, content)
+    VALUES (new.id, new.content);
 END;
 `
 

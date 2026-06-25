@@ -111,22 +111,38 @@ CREATE VIRTUAL TABLE IF NOT EXISTS global_memories_fts USING fts5(
   tokenize="unicode61 remove_diacritics 2 tokenchars '_-'"
 );
 
+-- Trigram mirror for fuzzy / typo matches. See project/schema.ts for the
+-- rationale; searched in parallel with global_memories_fts and RRF-fused.
+CREATE VIRTUAL TABLE IF NOT EXISTS global_memories_fts_trgm USING fts5(
+  content,
+  content='global_memories', content_rowid='id',
+  tokenize="trigram"
+);
+
 -- FTS5 sync triggers for global_memories.
 CREATE TRIGGER IF NOT EXISTS global_memories_ai AFTER INSERT ON global_memories BEGIN
   INSERT INTO global_memories_fts(rowid, content, category, channel)
     VALUES (new.id, new.content, new.category, new.channel);
+  INSERT INTO global_memories_fts_trgm(rowid, content)
+    VALUES (new.id, new.content);
 END;
 
 CREATE TRIGGER IF NOT EXISTS global_memories_ad AFTER DELETE ON global_memories BEGIN
   INSERT INTO global_memories_fts(global_memories_fts, rowid, content, category, channel)
     VALUES ('delete', old.id, old.content, old.category, old.channel);
+  INSERT INTO global_memories_fts_trgm(global_memories_fts_trgm, rowid, content)
+    VALUES ('delete', old.id, old.content);
 END;
 
 CREATE TRIGGER IF NOT EXISTS global_memories_au AFTER UPDATE ON global_memories BEGIN
   INSERT INTO global_memories_fts(global_memories_fts, rowid, content, category, channel)
     VALUES ('delete', old.id, old.content, old.category, old.channel);
+  INSERT INTO global_memories_fts_trgm(global_memories_fts_trgm, rowid, content)
+    VALUES ('delete', old.id, old.content);
   INSERT INTO global_memories_fts(rowid, content, category, channel)
     VALUES (new.id, new.content, new.category, new.channel);
+  INSERT INTO global_memories_fts_trgm(rowid, content)
+    VALUES (new.id, new.content);
 END;
 `
 
