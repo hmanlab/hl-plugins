@@ -183,7 +183,7 @@ functions the MCP tools use. Output formats:
 ```bash
 hmanlab-memory init                      # first-time setup
 hmanlab-memory start                     # alias for MCP server
-hmanlab-memory project export <name>     # → ~/hmanlab-exports/<name>-<date>.zip
+hmanlab-memory project export <name>     # → ~/.hmanlab/exports/<name>-<date>.zip
 hmanlab-memory project import <zip>      # restore
 hmanlab-memory memory search "<query>"   # → JSON
 hmanlab-memory memory hygiene all       # → JSON

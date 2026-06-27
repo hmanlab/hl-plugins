@@ -1,5 +1,5 @@
 // Project exporter. Bundles project.yaml + hmanlab.db + manifest.json into
-// a zip at the requested output path (default: ~/hmanlab-exports/<name>-<date>.zip).
+// a zip at the requested output path (default: ~/.hmanlab/exports/<name>-<date>.zip).
 //
 // Round-trip fidelity is preserved by VACUUM INTO (the SQLite-blessed way to
 // snapshot a live DB into a clean file with no WAL). FTS5 indexes come along
@@ -26,7 +26,7 @@ function todayIsoDate(now: number = Date.now()): string {
 
 /** Default export dir under the user's home. */
 function defaultExportDir(): string {
-  return join(hmanlabHome(), "..", "hmanlab-exports")
+  return join(hmanlabHome(), "exports")
 }
 
 /**

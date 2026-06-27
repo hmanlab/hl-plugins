@@ -92,7 +92,7 @@ Chat is **not** persisted to `state.json` — it lives in memory only. The histo
 
 ## Handle resolution (`MP_HANDLE`)
 
-Resolution order: `MP_HANDLE` env var → `~/.hl-plugins/multiplayer/handle` → `$USER`.
+Resolution order: `MP_HANDLE` env var → `~/.hmanlab/multiplayer/handle` (or `$HMANLAB_HOME/multiplayer/handle`) → `$USER`.
 
 Validation: lowercase, `[a-z0-9-]{1,16}`.
 
@@ -142,14 +142,14 @@ When a host change happens, the old code is added to the new host's grace list f
 
 ## State file
 
-Persistent state lives at `~/.hl-plugins/multiplayer/state.json` (atomic write — `.tmp` + rename). Contains:
+Persistent state lives at `~/.hmanlab/multiplayer/state.json` (atomic write — `.tmp` + rename). Contains:
 
 - `myHandle` — your chosen handle
 - `lastHostUrl` — the last host you joined
 - `graceCodes` — `[{ code, handle, validUntil }]` codes the new host accepts
 - `history` — recent events (host_started, host_changed, session_ended, guest_joined, guest_left)
 
-The chosen handle is also persisted to `~/.hl-plugins/multiplayer/handle`.
+The chosen handle is also persisted to `~/.hmanlab/multiplayer/handle`.
 
 ## Failure modes to surface
 

@@ -137,7 +137,7 @@ the full manifest shape.
 |---|---|---|
 | `opencodePlugin` | OpenCode | `.ts` source copied to `~/.opencode/plugin/` and added to `plugin[]` |
 | `opencodeSkill` | OpenCode | Markdown skill copied to `~/.opencode/skill/<plugin>/` |
-| `claudeMcp` | Claude Code | Bundled MCP server copied to `~/.local/share/hl-plugins/<plugin>/` and registered in `~/.claude.json`'s `mcpServers` |
+| `claudeMcp` | Claude Code | Bundled MCP server copied to `~/.hmanlab/plugins/<plugin>/` (or `$HMANLAB_HOME/plugins/<plugin>/`) and registered in `~/.claude.json`'s `mcpServers` |
 | `claudeSkill` | Claude Code | Markdown skill copied to `~/.claude/skills/<plugin>/SKILL.md` |
 
 ## Adding to default install set

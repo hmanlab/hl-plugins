@@ -9,7 +9,7 @@
 //   6. Merge config (additive, idempotent — opencode + claude.json)
 //   7. Verify (run postInstall commands)
 
-import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { discoverPlugins, defaultInstallPlugins, ensurePluginAvailable } from "../lib/registry.js"
 import { run, runArgv, tryRun, ShellError, fillTemplate } from "../lib/shell.js"
@@ -17,7 +17,9 @@ import { ui } from "../lib/ui.js"
 import {
   claudeConfigDir,
   claudeSkillDir,
-  hlPluginsDataPluginDir,
+  hmanlabPluginDir,
+  hmanlabPluginsDir,
+  legacyHlPluginsDataDir,
   opencodeConfigDir,
   opencodePluginDir,
   opencodeSkillDir,
@@ -70,7 +72,7 @@ async function ensureRequirement(req: PluginRequirement): Promise<string> {
  */
 function cliBundlePath(plugin: PluginManifest): string | null {
   if (!plugin.contract.cli) return null
-  return join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.cli))
+  return join(hmanlabPluginDir(plugin.name), basename(plugin.contract.cli))
 }
 
 /**
@@ -247,10 +249,10 @@ async function copyPluginFiles(plugin: PluginManifest): Promise<string[]> {
         `Claude MCP bundle missing: ${src}\n` + `Run \`bun run build\` inside the plugin package first.`,
       )
     }
-    // Ship the bundle under ~/.local/share/hl-plugins/<plugin>/ so it
+    // Ship the bundle under <HMANLAB_HOME>/plugins/<plugin>/ so it
     // survives the source package being moved/renamed, and Claude Code
     // launches the same path on every machine.
-    const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    const dest = join(hmanlabPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
     mkdirSync(dirname(dest), { recursive: true })
     copyFileSync(src, dest)
     copied.push(tilde(dest))
@@ -263,7 +265,7 @@ async function copyPluginFiles(plugin: PluginManifest): Promise<string[]> {
     if (!existsSync(src)) {
       throw new Error(`Plugin CLI bundle missing: ${src}\n` + `Run \`bun run build\` inside the plugin package first.`)
     }
-    const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.cli))
+    const dest = join(hmanlabPluginDir(plugin.name), basename(plugin.contract.cli))
     mkdirSync(dirname(dest), { recursive: true })
     copyFileSync(src, dest)
     copied.push(tilde(dest))
@@ -296,6 +298,71 @@ async function copyDir(src: string, dest: string): Promise<void> {
   await run(`cp -R ${JSON.stringify(src + "/.")} ${JSON.stringify(dest)}`)
 }
 
+/**
+ * One-time migration from the legacy `~/.local/share/hl-plugins/<plugin>/`
+ * (or `%LOCALAPPDATA%\hl-plugins\<plugin>\` on Windows) layout to the new
+ * `<HMANLAB_HOME>/plugins/<plugin>/` home. Pure fs ops, no UI — exported
+ * for unit testing.
+ *
+ * - If `legacy` is null or doesn't exist → no-op (returns empty lists).
+ * - For each `<plugin>` subdir: rename to `<dest>/<plugin>/` if the
+ *   destination is empty, else copy contents via `copy` and remove the source.
+ * - If the legacy dir is empty after the move, remove it.
+ * - Foreign files inside the legacy dir get a warning, not a deletion.
+ *
+ * Idempotent: a second call is a no-op because the legacy dir is gone.
+ */
+export function migrateLegacyBundles(
+  legacy: string | null,
+  dest: string,
+  copy: (src: string, dst: string) => Promise<void> = copyDir,
+): { moved: string[]; warnings: string[]; cleanedLegacy: boolean } {
+  const moved: string[] = []
+  const warnings: string[] = []
+  if (!legacy || !existsSync(legacy)) return { moved, warnings, cleanedLegacy: false }
+  mkdirSync(dest, { recursive: true })
+  for (const entry of readdirSync(legacy)) {
+    const srcPlugin = join(legacy, entry)
+    if (!statSync(srcPlugin).isDirectory()) {
+      warnings.push(`legacy plugin dir contains unexpected file ${srcPlugin}; leaving it in place`)
+      continue
+    }
+    const dstPlugin = join(dest, entry)
+    if (!existsSync(dstPlugin)) {
+      renameSync(srcPlugin, dstPlugin)
+    } else {
+      // Destination already populated (likely a partial earlier install).
+      // The install step that follows re-copies bundles anyway, so a
+      // straight copy is fine here.
+      void copy(srcPlugin, dstPlugin)
+      for (const f of readdirSync(srcPlugin)) {
+        unlinkSync(join(srcPlugin, f))
+      }
+      rmdirSync(srcPlugin)
+    }
+    moved.push(`${srcPlugin} → ${dstPlugin}`)
+  }
+  let cleanedLegacy = false
+  if (readdirSync(legacy).length === 0) {
+    rmdirSync(legacy)
+    cleanedLegacy = true
+  }
+  return { moved, warnings, cleanedLegacy }
+}
+
+/** Convenience wrapper for the install command — resolves paths and
+ *  formats the result for the UI. */
+async function runLegacyMigration(): Promise<string[]> {
+  const legacy = legacyHlPluginsDataDir()
+  const dest = hmanlabPluginsDir()
+  const { moved, warnings } = migrateLegacyBundles(legacy, dest)
+  for (const w of warnings) ui.warn(w)
+  return moved.map((m) => {
+    const [src, dst] = m.split(" → ")
+    return `${tilde(src ?? "")} → ${tilde(dst ?? "")}`
+  })
+}
+
 async function mergeConfig(plugin: PluginManifest): Promise<string[]> {
   const changes: string[] = []
   if (plugin.contract.opencodePlugin) {
@@ -315,7 +382,7 @@ async function mergeConfig(plugin: PluginManifest): Promise<string[]> {
     }
   }
   if (plugin.contract.claudeMcp) {
-    const bundlePath = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    const bundlePath = join(hmanlabPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
     // The MCP server is built --target=bun, so we launch it with bun.
     // The bun binary is a hard requirement of this plugin (declared in
     // requires[]) so it will be on PATH by the time we get here.
@@ -362,6 +429,12 @@ async function installOne(
     await checkPreflight()
   })
 
+  // One-time move from the legacy `~/.local/share/hl-plugins/` layout.
+  // Runs before any file ops so the rest of the install sees a clean state.
+  // First plugin in the batch does the move; subsequent ones are no-ops.
+  const migrated = await ui.spinner("Migrate legacy bundles", () => runLegacyMigration())
+  for (const line of migrated) ui.info(`    ${ui.dim("→")} ${line}`)
+
   for (const req of plugin.contract.requires ?? []) {
     const note = await ui.spinner(`Requirement: ${req.name}`, () => ensureRequirement(req))
     if (note) ui.info(`    ${ui.dim(note)}`)
@@ -407,7 +480,7 @@ async function copyCliBundle(plugin: PluginManifest): Promise<void> {
   if (!existsSync(src)) {
     throw new Error(`Plugin CLI bundle missing: ${src}\n` + `Run \`bun run build\` inside the plugin package first.`)
   }
-  const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.cli))
+  const dest = join(hmanlabPluginDir(plugin.name), basename(plugin.contract.cli))
   mkdirSync(dirname(dest), { recursive: true })
   copyFileSync(src, dest)
 }

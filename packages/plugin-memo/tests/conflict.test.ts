@@ -91,6 +91,7 @@ describe("detectConflict — 20-pair smoke set", () => {
   ]
 
   let correct = 0
+  const mismatches: string[] = []
   for (const p of pairs) {
     it(`pair: "${p.a.slice(0, 30)}..." vs "${p.b.slice(0, 30)}..." → ${p.expected}`, () => {
       const candidates = [
@@ -124,15 +125,27 @@ describe("detectConflict — 20-pair smoke set", () => {
       const expected = p.expected === "conflict"
       if (isConflict === expected) correct++
       else {
-        console.log(`  FAIL: "${p.a}" vs "${p.b}" → got ${isConflict}, expected ${expected}`)
+        mismatches.push(`"${p.a}" vs "${p.b}" → got ${isConflict}, expected ${expected}`)
       }
     })
   }
 
-  it(`precision meets MVP threshold (>=70% of 20-pair smoke set)`, () => {
+  // After all pair tests run, surface only the mismatches that drop the
+  // precision below the MVP threshold. This was previously printed as
+  // `console.log("  FAIL: ...")` on every mismatch, which made the
+  // category-mismatch cases (pairs 11-15, *expected* to fail under the
+  // hash embedder) look like real test failures in CI output.
+  it("precision meets MVP threshold (>=70% of 20-pair smoke set)", () => {
     // Loose threshold — full PRD S6 (>80%) lands in Phase 06 with the
     // larger 50-pair curated set. MVP target is "doesn't embarrass".
-    expect(correct / pairs.length).toBeGreaterThanOrEqual(0.7)
+    const ratio = correct / pairs.length
+    if (ratio < 0.7) {
+      for (const m of mismatches) {
+        // eslint-disable-next-line no-console
+        console.log(`  conflict smoke: ${m}`)
+      }
+    }
+    expect(ratio).toBeGreaterThanOrEqual(0.7)
   })
 })
 

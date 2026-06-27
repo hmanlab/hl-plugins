@@ -3,6 +3,17 @@
 All notable changes to `@hmanlab/memo` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] — 2026-06-27
+
+### Changed
+
+- **Default export dir moved under `~/.hmanlab/exports/`.** The export
+  flow used to write archives to a sibling `~/hmanlab-exports/`. It now
+  writes to `<HMANLAB_HOME>/exports/`, keeping all hmanlab-managed
+  state under one root. The `import` flow takes the archive path as a
+  parameter and is unaffected. The `.import-{ts}/` working directory
+  for the integrity check stays under `~/.hmanlab/` (was already there).
+
 ## [1.0.0] — 2026-06-25
 
 First tagged release. Six development phases shipped end-to-end.

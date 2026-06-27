@@ -79,7 +79,7 @@ When a user runs `hl-plugins install mmx` (after `npm install -g @hmanlab/hl-plu
         dest: ~/.opencode/skill/mmx/SKILL.md
     Claude Code target (if contract declares claudeMcp/claudeSkill):
       - src:  packages/plugin-mmx-claude/dist/mmx-mcp-server.js
-        dest: ~/.local/share/hl-plugins/mmx-claude/mmx-mcp-server.js
+        dest: ~/.hmanlab/plugins/mmx-claude/mmx-mcp-server.js
       - src:  packages/plugin-mmx-claude/claude/skill/mmx/SKILL.md
         dest: ~/.claude/skills/mmx-claude/SKILL.md
     - create dirs as needed
@@ -129,7 +129,7 @@ file-pointer fields are independent — declare any subset.
 
     // ── Claude Code target ──────────────────────────────────────────
     // Path to a bundled MCP server. The CLI copies it to
-    // ~/.local/share/hl-plugins/<plugin>/ and registers the absolute
+    // ~/.hmanlab/plugins/<plugin>/ and registers the absolute
     // path in mcpServers[name] of ~/.claude.json (command: "bun").
     "claudeMcp": "./dist/mmx-mcp-server.js",
 

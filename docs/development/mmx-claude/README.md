@@ -123,7 +123,7 @@ docs/development/mmx-claude/README.md        (this file)
 
 ```
 packages/cli/src/lib/registry.ts             Add claudeMcp? + claudeSkill? to PluginManifest.contract
-packages/cli/src/lib/paths.ts                Add claudeConfigDir(), claudeConfigFile(), hlPluginsDataDir()
+packages/cli/src/lib/paths.ts                Add claudeConfigDir(), claudeConfigFile(), hmanlabPluginDir()
 packages/cli/src/lib/config.ts               Add addMcpServer(), removeMcpServer()
 packages/cli/src/commands/install.ts         Extend copyPluginFiles + mergeConfig: copy MCP bundle, copy skill, merge ~/.claude.json
 packages/cli/src/commands/uninstall.ts       Mirror: remove bundle, remove skill, remove mcpServers entry
@@ -150,7 +150,7 @@ The work splits into three phases, ordered so each phase is independently shippa
 
 **Acceptance:**
 - `packages/cli/src/lib/registry.ts` type-checks with the new fields
-- `packages/cli/src/lib/paths.ts` exports `claudeConfigDir`, `claudeConfigFile`, `hlPluginsDataDir` — unit-tested for macOS / Linux / Windows path conventions
+- `packages/cli/src/lib/paths.ts` exports `claudeConfigDir`, `claudeConfigFile`, `hmanlabPluginDir` — unit-tested for macOS / Linux / Windows path conventions
 - `hl-plugins list` still works and shows the existing `mmx` plugin
 
 **Why first:** every later phase depends on these types and helpers. Shipping the foundation alone is useful as a checkpoint for reviewers.
@@ -175,7 +175,7 @@ The work splits into three phases, ordered so each phase is independently shippa
   - Auto-installs Bun if missing
   - Auto-installs `mmx-cli` if missing
   - Prompts for API key (or reads `MMX_API_KEY`)
-  - Copies `dist/mmx-mcp-server.js` to `~/.local/share/hl-plugins/mmx-claude/mmx-mcp-server.js`
+  - Copies `dist/mmx-mcp-server.js` to `~/.hmanlab/plugins/mmx-claude/mmx-mcp-server.js`
   - Copies skill MD to `~/.claude/skills/mmx-claude/SKILL.md`
   - Merges `mcpServers.mmx-claude` into `~/.claude.json`
   - Runs `mmx quota` as the post-install smoke test
@@ -191,7 +191,7 @@ The work splits into three phases, ordered so each phase is independently shippa
 
 | Test | Where | What it covers |
 |---|---|---|
-| Path helpers | `packages/cli/test/lib/paths.test.ts` | `claudeConfigDir`, `claudeConfigFile`, `hlPluginsDataDir` resolve to platform-correct paths |
+| Path helpers | `packages/cli/test/lib/paths.test.ts` | `claudeConfigDir`, `claudeConfigFile`, `hmanlabPluginDir` resolve to platform-correct paths |
 | Contract types | `packages/cli/test/lib/registry.test.ts` | A `PluginManifest` with only `claudeMcp` validates; with only `opencodePlugin` validates; with both validates |
 | MCP smoke | `packages/plugin-mmx-claude/test/mcp-smoke.test.ts` | Spawn bundle, JSON-RPC `tools/list`, assert seven tool names |
 | `runMmx` lib | `packages/plugin-mmx-claude/test/lib.test.ts` | Suspicious-path rejection (HOME, ~/Desktop, /tmp, "."), env-var override, default dir |

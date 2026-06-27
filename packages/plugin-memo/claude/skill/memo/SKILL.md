@@ -11,8 +11,8 @@ under `~/.hmanlab/` (one root SQLite DB + a `personas/` directory of YAML
 files + one DB per registered project). No cloud, no account, no telemetry.
 
 The MCP bundle is `--target=bun` and lives at
-`~/.local/share/hl-plugins/memo/memo-mcp-server.js`. Claude Code launches
-it on stdio.
+`~/.hmanlab/plugins/memo/memo-mcp-server.js` (or `$HMANLAB_HOME/plugins/memo/memo-mcp-server.js`).
+Claude Code launches it on stdio.
 
 ## Search strategy — normalize the query before calling `memory_search`
 

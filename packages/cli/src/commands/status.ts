@@ -8,7 +8,7 @@ import { run, tryRun } from "../lib/shell.js"
 import { ui } from "../lib/ui.js"
 import {
   claudeSkillDir,
-  hlPluginsDataPluginDir,
+  hmanlabPluginDir,
   opencodePluginDir,
   opencodeSkillDir,
   tilde,
@@ -81,7 +81,7 @@ async function reportOne(plugin: PluginManifest): Promise<void> {
 
   // Claude Code install points
   if (plugin.contract.claudeMcp) {
-    const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    const dest = join(hmanlabPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
     ui.info(row("Claude MCP bundle:", tilde(dest), existsSync(dest)))
   }
   if (plugin.contract.claudeSkill) {

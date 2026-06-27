@@ -2,13 +2,14 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
 import { MultiplayerPlugin } from "./plugin.ts"
 import { Toaster, Logger } from "./bridge/index.ts"
-import { StateStore, readHandleFileSync, writeHandleFile } from "./persistence/index.ts"
+import { StateStore, readHandleFileSync, writeHandleFile, stateDir } from "./persistence/index.ts"
 import { resolvePort, resolveHost } from "./env/index.ts"
 import { IdleRole, TransferController } from "./role/index.ts"
 import { isValidHandle, normalizeHandle, osUser, mintCode } from "./handle/index.ts"
 import { GRACE_S, CASCADE_TIMEOUT_MS } from "./constants.ts"
 import { companionSocketPath, companionTokenPath } from "./companion/paths.ts"
 import { detectStrategy, manualCommand, spawnStrategy } from "./companion/spawner.ts"
+import { migrateLegacyMultiplayerState } from "./persistence/migrate.ts"
 
 function companionBinPath(): string {
   // Allow override via env (e.g. for testing or custom installs)
@@ -22,6 +23,22 @@ function companionBinPath(): string {
 }
 
 export async function createMultiplayerPlugin(input: PluginInput) {
+  // One-time move from the legacy `~/.hl-plugins/multiplayer/` layout.
+  // Runs before any fs read of the handle file (line 33) or socket
+  // path (line 127), so the rest of the boot sees the new home.
+  // Idempotent: no-op on subsequent calls because the legacy dir
+  // is gone or empty.
+  const migration = migrateLegacyMultiplayerState(stateDir())
+  for (const w of migration.warnings) {
+    process.stderr.write(`[hmanlab/multiplayer] ${w}\n`)
+  }
+  if (migration.moved.length > 0) {
+    process.stderr.write(
+      `[hmanlab/multiplayer] migrated ${migration.moved.length} file(s) from ` +
+        `~/.hl-plugins/multiplayer → ${stateDir()}\n`,
+    )
+  }
+
   const toaster = new Toaster(input.client)
   const logger = new Logger(input.client)
   const store = new StateStore(() => {

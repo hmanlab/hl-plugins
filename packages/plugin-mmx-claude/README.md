@@ -46,7 +46,7 @@ Context Protocol (MCP) server** that Claude Code launches at startup.
 ## How it works
 
 1. The install flow copies the pre-built MCP server bundle to
-   `~/.local/share/hl-plugins/mmx-claude/mmx-mcp-server.js`
+   `~/.hmanlab/plugins/mmx-claude/mmx-mcp-server.js`
 2. Copies the skill markdown to `~/.claude/skills/mmx-claude/SKILL.md`
 3. Merges `mcpServers.mmx-claude` into `~/.claude.json`
 4. Runs `mmx quota` as a post-install smoke test

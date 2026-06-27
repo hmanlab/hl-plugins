@@ -8,7 +8,7 @@ import { discoverPlugins, ensurePluginAvailable } from "../lib/registry.js"
 import { ui } from "../lib/ui.js"
 import {
   claudeSkillDir,
-  hlPluginsDataPluginDir,
+  hmanlabPluginDir,
   opencodePluginDir,
   opencodeSkillDir,
   tilde,
@@ -38,7 +38,7 @@ function installedPluginNames(): string[] {
         if (existsSync(target)) return true
       }
       if (p.contract.claudeMcp) {
-        const target = join(hlPluginsDataPluginDir(p.name), basename(p.contract.claudeMcp))
+        const target = join(hmanlabPluginDir(p.name), basename(p.contract.claudeMcp))
         if (existsSync(target)) return true
       }
       if (p.contract.claudeSkill) {
@@ -109,7 +109,7 @@ function uninstallOne(plugin: PluginManifest): void {
 
   // 5. Remove the Claude MCP bundle
   if (plugin.contract.claudeMcp) {
-    const dest = join(hlPluginsDataPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
+    const dest = join(hmanlabPluginDir(plugin.name), basename(plugin.contract.claudeMcp))
     if (existsSync(dest)) {
       rmSync(dest)
       ui.info(`  ${ui.ok("removed " + tilde(dest))}`)

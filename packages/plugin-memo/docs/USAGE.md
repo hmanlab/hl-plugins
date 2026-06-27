@@ -66,8 +66,8 @@ hmanlab-memory project list
 hmanlab-memory project register ~/projects/ftmo ftmo
 hmanlab-memory project register ~/projects/course course
 hmanlab-memory project switch ftmo
-hmanlab-memory project export ftmo             # → ~/hmanlab-exports/ftmo-2026-06-25.zip
-hmanlab-memory project import ~/hmanlab-exports/ftmo-2026-06-25.zip
+hmanlab-memory project export ftmo             # → ~/.hmanlab/exports/ftmo-2026-06-25.zip
+hmanlab-memory project import ~/.hmanlab/exports/ftmo-2026-06-25.zip
 hmanlab-memory project archive ftmo           # soft-archive
 ```
 

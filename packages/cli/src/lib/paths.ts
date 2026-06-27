@@ -72,25 +72,45 @@ export function claudeConfigFile(): string {
 }
 
 /**
- * Where the CLI keeps runtime artifacts it owns — bundled MCP server
- * executables, plugin-specific data dirs, etc. XDG-style on every
- * platform: `~/.local/share/hl-plugins/` on macOS/Linux, `%LOCALAPPDATA%
- * \hl-plugins\` on Windows.
+ * Resolves the hmanlab root on disk. Mirrors
+ * `packages/plugin-memo/src/config.ts:hmanlabHome()` so the CLI's install
+ * artifacts and the plugin's runtime data share one knob.
+ *
+ *   1. `$HMANLAB_HOME` if set and non-empty (whitespace-only falls through).
+ *   2. Leading `~` is expanded to `$HOME`.
+ *   3. The result is made absolute against the cwd.
+ *   4. Default: `$HOME/.hmanlab`.
+ *
+ * Migrated from the previous `~/.local/share/hl-plugins/` layout — see
+ * `install.ts:migrateLegacyBundles()` for the auto-move on first install.
  */
-export function hlPluginsDataDir(): string {
+export function hmanlabHome(): string {
+  const fromEnv = process.env["HMANLAB_HOME"]
+  if (fromEnv && fromEnv.trim().length > 0) return resolve(expandHome(fromEnv))
+  return join(HOME(), ".hmanlab")
+}
+
+/** Where the CLI drops per-plugin install artifacts (MCP bundle, CLI bundle). */
+export function hmanlabPluginsDir(): string {
+  return join(hmanlabHome(), "plugins")
+}
+
+/** Where one plugin's install artifacts live. */
+export function hmanlabPluginDir(pluginName: string): string {
+  return join(hmanlabPluginsDir(), pluginName)
+}
+
+/**
+ * Returns the legacy install-artifact directory for the current platform,
+ * or `null` if the platform is unsupported. Used only by the auto-migration
+ * step in `install.ts` — new code should use `hmanlabPluginDir()`.
+ */
+export function legacyHlPluginsDataDir(): string | null {
   if (PLATFORM() === "win32") {
     const local = process.env.LOCALAPPDATA ?? join(HOME(), "AppData", "Local")
     return join(local, "hl-plugins")
   }
-  // macOS + Linux: $XDG_DATA_HOME/hl-plugins OR ~/.local/share/hl-plugins
-  const xdg = process.env.XDG_DATA_HOME
-  if (xdg) return join(xdg, "hl-plugins")
   return join(HOME(), ".local", "share", "hl-plugins")
-}
-
-/** Where one plugin's runtime artifacts live under hlPluginsDataDir(). */
-export function hlPluginsDataPluginDir(pluginName: string): string {
-  return join(hlPluginsDataDir(), pluginName)
 }
 
 // Memoized: finding the monorepo root scans the filesystem, so do it once.

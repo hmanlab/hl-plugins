@@ -35,6 +35,11 @@ Thumbs.db
 *.bak
 *~
 
+# ─── Claude Code session state ────────────────────────────────
+# Plan files and session memory written by Claude Code into
+# .claude/ inside the working tree. Local-only; do not commit.
+.claude/
+
 # ─── Caches ───────────────────────────────────────────────────
 .cache/
 .parcel-cache/

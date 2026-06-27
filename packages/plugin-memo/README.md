@@ -20,12 +20,12 @@ It's the one-line path to a working setup. It runs five steps, in order:
    requirement. The installer auto-installs it via
    `curl -fsSL https://bun.sh/install | bash` if it isn't on PATH yet.
 3. **Stage the plugin CLI.** Copies `dist/cli.js` to
-   `~/.local/share/hl-plugins/memo/` so the next step can invoke plugin
+   `~/.hmanlab/plugins/memo/` so the next step can invoke plugin
    subcommands by absolute path (no PATH dependency yet).
 4. **Prompt about MiniLM.** *See the section below.* Your answer is
    persisted during install — there's no "run later" step.
 5. **Copy + register.** Ships the MCP server bundle to
-   `~/.local/share/hl-plugins/memo/memo-mcp-server.js`, drops the skill
+   `~/.hmanlab/plugins/memo/memo-mcp-server.js`, drops the skill
    markdown at `~/.claude/skills/memo/SKILL.md`, and registers the server
    in your Claude Code config. Then prints
    *"Restart opencode to use the new tools."*
@@ -161,7 +161,7 @@ hmanlab-memory mcp-config claude-code   # prints `claude mcp add hmanlab-memory 
 ```
 
 The CLI auto-installs Bun if missing and registers the MCP bundle
-under `~/.local/share/hl-plugins/memo/`, then wires it into
+under `~/.hmanlab/plugins/memo/`, then wires it into
 `~/.claude.json`.
 
 ## CLI quickstart
@@ -173,8 +173,8 @@ hmanlab-memory project switch ftmo
 hmanlab-memory memory save "FTMO daily loss limit is 5 percent" --category rules --importance 0.9
 hmanlab-memory memory search "FTMO daily loss"    # JSON output, pipe to jq
 hmanlab-memory memory hygiene all                 # structured report
-hmanlab-memory project export ftmo                 # → ~/hmanlab-exports/ftmo-<date>.zip
-hmanlab-memory project import ~/hmanlab-exports/ftmo-*.zip
+hmanlab-memory project export ftmo                 # → ~/.hmanlab/exports/ftmo-<date>.zip
+hmanlab-memory project import ~/.hmanlab/exports/ftmo-*.zip
 hmanlab-memory status
 ```
 

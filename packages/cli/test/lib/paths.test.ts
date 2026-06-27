@@ -117,57 +117,101 @@ describe("claudeConfigFile()", () => {
   })
 })
 
-describe("hlPluginsDataDir()", () => {
+describe("hmanlabHome()", () => {
   beforeEach(() => {
     setHome("/Users/test")
     clearEnv()
   })
 
-  it("returns ~/.local/share/hl-plugins on macOS when XDG_DATA_HOME is unset", () => {
+  it("defaults to ~/.hmanlab on macOS when HMANLAB_HOME is unset", () => {
     setPlatform("darwin")
-    delete process.env.XDG_DATA_HOME
-    assert.equal(paths.hlPluginsDataDir(), join("/Users/test", ".local", "share", "hl-plugins"))
+    delete process.env.HMANLAB_HOME
+    assert.equal(paths.hmanlabHome(), join("/Users/test", ".hmanlab"))
   })
 
-  it("returns ~/.local/share/hl-plugins on Linux when XDG_DATA_HOME is unset", () => {
+  it("defaults to ~/.hmanlab on Linux when HMANLAB_HOME is unset", () => {
     setPlatform("linux")
-    delete process.env.XDG_DATA_HOME
-    assert.equal(paths.hlPluginsDataDir(), join("/Users/test", ".local", "share", "hl-plugins"))
+    delete process.env.HMANLAB_HOME
+    assert.equal(paths.hmanlabHome(), join("/Users/test", ".hmanlab"))
   })
 
-  it("honors XDG_DATA_HOME on Linux", () => {
+  it("honors an absolute HMANLAB_HOME", () => {
+    process.env.HMANLAB_HOME = "/srv/hmanlab"
+    assert.equal(paths.hmanlabHome(), "/srv/hmanlab")
+  })
+
+  it("expands a leading tilde in HMANLAB_HOME", () => {
+    setHome("/Users/test")
+    process.env.HMANLAB_HOME = "~/custom"
+    assert.equal(paths.hmanlabHome(), join("/Users/test", "custom"))
+  })
+
+  it("treats an empty HMANLAB_HOME as unset", () => {
+    process.env.HMANLAB_HOME = ""
+    assert.equal(paths.hmanlabHome(), join("/Users/test", ".hmanlab"))
+  })
+
+  it("treats a whitespace-only HMANLAB_HOME as unset", () => {
+    process.env.HMANLAB_HOME = "   "
+    assert.equal(paths.hmanlabHome(), join("/Users/test", ".hmanlab"))
+  })
+})
+
+describe("hmanlabPluginsDir()", () => {
+  beforeEach(() => {
+    setHome("/Users/test")
+    clearEnv()
+  })
+
+  it("nests under hmanlabHome()/plugins on macOS", () => {
+    setPlatform("darwin")
+    delete process.env.HMANLAB_HOME
+    assert.equal(paths.hmanlabPluginsDir(), join("/Users/test", ".hmanlab", "plugins"))
+  })
+
+  it("honors HMANLAB_HOME", () => {
+    process.env.HMANLAB_HOME = "/srv/hmanlab"
+    assert.equal(paths.hmanlabPluginsDir(), join("/srv/hmanlab", "plugins"))
+  })
+})
+
+describe("hmanlabPluginDir(pluginName)", () => {
+  beforeEach(() => {
+    setHome("/Users/test")
+    clearEnv()
+  })
+
+  it("nests under hmanlabPluginsDir/<plugin> on macOS", () => {
+    setPlatform("darwin")
+    delete process.env.HMANLAB_HOME
+    assert.equal(paths.hmanlabPluginDir("memo"), join("/Users/test", ".hmanlab", "plugins", "memo"))
+  })
+
+  it("respects HMANLAB_HOME", () => {
+    process.env.HMANLAB_HOME = "/srv/hmanlab"
+    assert.equal(paths.hmanlabPluginDir("mmx-claude"), join("/srv/hmanlab", "plugins", "mmx-claude"))
+  })
+})
+
+describe("legacyHlPluginsDataDir()", () => {
+  beforeEach(() => setHome("/Users/test"))
+
+  it("returns ~/.local/share/hl-plugins on macOS", () => {
+    setPlatform("darwin")
+    assert.equal(paths.legacyHlPluginsDataDir(), join("/Users/test", ".local", "share", "hl-plugins"))
+  })
+
+  it("returns ~/.local/share/hl-plugins on Linux", () => {
     setPlatform("linux")
-    process.env.XDG_DATA_HOME = "/srv/data"
-    assert.equal(paths.hlPluginsDataDir(), join("/srv/data", "hl-plugins"))
+    assert.equal(paths.legacyHlPluginsDataDir(), join("/Users/test", ".local", "share", "hl-plugins"))
   })
 
   it("returns %LOCALAPPDATA%/hl-plugins on Windows when LOCALAPPDATA is set", () => {
     setPlatform("win32")
     setHome("C:\\Users\\test")
     process.env.LOCALAPPDATA = "C:\\Users\\test\\AppData\\Local"
-    const actual = paths.hlPluginsDataDir().replace(/\\/g, "/")
+    const actual = paths.legacyHlPluginsDataDir()!.replace(/\\/g, "/")
     const expected = "C:/Users/test/AppData/Local/hl-plugins"
     assert.equal(actual, expected)
-  })
-
-  it("falls back to ~/AppData/Local/hl-plugins on Windows when LOCALAPPDATA is unset", () => {
-    setPlatform("win32")
-    setHome("C:\\Users\\test")
-    delete process.env.LOCALAPPDATA
-    const actual = paths.hlPluginsDataDir().replace(/\\/g, "/")
-    const expected = "C:/Users/test/AppData/Local/hl-plugins"
-    assert.equal(actual, expected)
-  })
-})
-
-describe("hlPluginsDataPluginDir(pluginName)", () => {
-  beforeEach(() => setHome("/Users/test"))
-
-  it("nests under hlPluginsDataDir/<plugin> on macOS", () => {
-    setPlatform("darwin")
-    assert.equal(
-      paths.hlPluginsDataPluginDir("mmx-claude"),
-      join("/Users/test", ".local", "share", "hl-plugins", "mmx-claude"),
-    )
   })
 })
