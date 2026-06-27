@@ -1,6 +1,6 @@
 {
   "name": "@hmanlab/mmx",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Multimodal generation via MiniMax (image, video, music, speech, search, vision, quota).",
   "type": "module",
   "files": [

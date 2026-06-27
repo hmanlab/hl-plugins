@@ -1,6 +1,6 @@
 {
   "name": "@hmanlab/mmx-claude",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Claude Code MCP adapter for the seven MiniMax multimodal tools. Companion to @hl-plugins/mmx (OpenCode).",
   "type": "module",
   "files": [
